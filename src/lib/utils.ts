@@ -17,31 +17,39 @@ export const STATUS_ORDER: ProgressStatus[] = [
 
 export const STATUS_META: Record<
   ProgressStatus,
-  { label: string; emoji: string; bg: string; text: string }
+  { label: string; emoji: string; bg: string; border: string; text: string; dot: string }
 > = {
   NOT_STARTED: {
     label: "Not Started",
     emoji: "🔴",
     bg: "bg-status-notStarted",
+    border: "border-status-notStartedBorder",
     text: "text-status-notStartedText",
+    dot: "#EB5953",
   },
   IN_PROGRESS: {
     label: "In Progress",
     emoji: "🟡",
     bg: "bg-status-inProgress",
+    border: "border-status-inProgressBorder",
     text: "text-status-inProgressText",
+    dot: "#F3BF39",
   },
   DONE: {
     label: "Done",
     emoji: "🟢",
     bg: "bg-status-done",
+    border: "border-status-doneBorder",
     text: "text-status-doneText",
+    dot: "#46AF6A",
   },
   REVISED: {
     label: "Revised",
     emoji: "🩷",
     bg: "bg-status-revised",
+    border: "border-status-revisedBorder",
     text: "text-status-revisedText",
+    dot: "#CB41A2",
   },
 };
 

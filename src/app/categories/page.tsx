@@ -6,6 +6,9 @@ import { apiGet, apiPatch, apiPost } from "@/lib/api";
 import { Category } from "@/types/category";
 import { LoadingState, ErrorState, EmptyState } from "@/components/common/StateViews";
 import CategoryFormModal from "@/components/categories/CategoryFormModal";
+import Button from "@/components/common/Button";
+import Card from "@/components/common/Card";
+import Avatar from "@/components/common/Avatar";
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -62,69 +65,77 @@ export default function CategoriesPage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Subjects</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Subjects</h1>
           <p className="text-sm text-slate-500">
             Categories are fully dynamic — add DSA, HTML, React, or anything else.
           </p>
         </div>
-        <button
+        <Button
           onClick={() => {
             setEditing(null);
             setModalOpen(true);
           }}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
         >
-          + Add Subject
-        </button>
+          <span className="text-base leading-none">+</span> Add Subject
+        </Button>
       </div>
 
       {loading && <LoadingState label="Loading subjects..." />}
       {error && <ErrorState message={error} onRetry={load} />}
       {!loading && !error && categories.length === 0 && (
-        <EmptyState title="No subjects yet" description="Add your first subject to get started." />
+        <EmptyState icon="📚" title="No subjects yet" description="Add your first subject to get started." />
       )}
 
       {!loading && !error && categories.length > 0 && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {categories.map((category) => (
-            <div
+            <Card
               key={category._id}
-              className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4"
+              className="flex items-center justify-between transition-shadow hover:shadow-softHover"
             >
-              <div>
-                <p className="font-medium text-slate-900">{category.name}</p>
-                <span
-                  className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                    category.isActive
-                      ? "bg-green-50 text-green-700"
-                      : "bg-slate-100 text-slate-500"
-                  }`}
-                >
-                  {category.isActive ? "Active" : "Inactive"}
-                </span>
+              <div className="flex items-center gap-3">
+                <Avatar name={category.name} size="lg" />
+                <div>
+                  <p className="font-semibold text-slate-900">{category.name}</p>
+                  <span
+                    className={`mt-0.5 inline-flex items-center gap-1 text-xs font-medium ${
+                      category.isActive ? "text-emerald-600" : "text-slate-400"
+                    }`}
+                  >
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${
+                        category.isActive ? "bg-emerald-500" : "bg-slate-300"
+                      }`}
+                    />
+                    {category.isActive ? "Active" : "Inactive"}
+                  </span>
+                </div>
               </div>
               <div className="flex flex-col gap-1.5">
-                <button
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => {
                     setEditing(category);
                     setModalOpen(true);
                   }}
-                  className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium hover:bg-slate-50"
                 >
                   Edit
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant={category.isActive ? "dangerOutline" : "outline"}
+                  size="sm"
                   onClick={() => toggleActive(category)}
-                  className={`rounded-md px-2.5 py-1 text-xs font-medium ${
-                    category.isActive
-                      ? "border border-amber-300 text-amber-700 hover:bg-amber-50"
-                      : "border border-green-300 text-green-700 hover:bg-green-50"
-                  }`}
+                  className={
+                    !category.isActive
+                      ? "!border-emerald-300 !text-emerald-700 hover:!bg-emerald-50"
+                      : undefined
+                  }
                 >
                   {category.isActive ? "Deactivate" : "Reactivate"}
-                </button>
+                </Button>
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       )}

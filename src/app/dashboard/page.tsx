@@ -16,6 +16,8 @@ import TotalProgressCard from "@/components/dashboard/TotalProgressCard";
 import TodayProgressCard from "@/components/dashboard/TodayProgressCard";
 import SubjectStatsCard from "@/components/dashboard/SubjectStatsCard";
 import IndividualProgressCard from "@/components/dashboard/IndividualProgressCard";
+import StatTile from "@/components/dashboard/StatTile";
+import Button from "@/components/common/Button";
 
 interface DashboardData {
   people: Person[];
@@ -110,21 +112,35 @@ export default function DashboardPage() {
   if (error && !data) return <ErrorState message={error} onRetry={load} />;
   if (!data) return null;
 
+  const totalQuestions = data.totalsByCategory.reduce((sum, t) => sum + t.total, 0);
+  const avgToday = data.todayProgressByPerson.length
+    ? Math.round(
+        data.todayProgressByPerson.reduce((sum, p) => sum + p.percent, 0) /
+          data.todayProgressByPerson.length
+      )
+    : 0;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Technical Productivity Tracker</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+            Technical Productivity Tracker
+          </h1>
           <p className="text-sm text-slate-500">
             Track progress across every subject and every person, dynamically.
           </p>
         </div>
-        <button
-          onClick={() => setAddOpen(true)}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-        >
-          + Add Question
-        </button>
+        <Button onClick={() => setAddOpen(true)}>
+          <span className="text-base leading-none">+</span> Add Question
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatTile icon="📋" label="Total Questions" value={totalQuestions} accent="#25A6EE" />
+        <StatTile icon="👥" label="Active People" value={activePeople.length} accent="#A361CF" />
+        <StatTile icon="📚" label="Subjects" value={activeCategories.length} accent="#13C8A5" />
+        <StatTile icon="⚡" label="Today's Avg" value={`${avgToday}%`} accent="#F59D02" />
       </div>
 
       <FilterBar
@@ -149,8 +165,8 @@ export default function DashboardPage() {
       />
 
       <div>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-          Questions
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
+          <span className="text-base leading-none">🗂️</span> Questions
         </h2>
         {filteredTasks.length === 0 ? (
           <EmptyState

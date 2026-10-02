@@ -18,6 +18,7 @@ import {
 } from "recharts";
 import { apiGet } from "@/lib/api";
 import { LoadingState, ErrorState, EmptyState } from "@/components/common/StateViews";
+import { CardHeader } from "@/components/common/Card";
 
 interface AnalyticsData {
   categories: { categoryId: string; name: string }[];
@@ -84,7 +85,11 @@ export default function AnalyticsPage() {
 
   if (!hasAnyData) {
     return (
-      <EmptyState title="No analytics yet" description="Add some questions to see analytics here." />
+      <EmptyState
+        icon="📈"
+        title="No analytics yet"
+        description="Add some questions to see analytics here."
+      />
     );
   }
 
@@ -96,14 +101,14 @@ export default function AnalyticsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Analytics</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Analytics</h1>
         <p className="text-sm text-slate-500">
           Charts adapt automatically to any subject or person you add.
         </p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <ChartCard title="Questions Added Over Time">
+        <ChartCard title="Questions Added Over Time" icon="📈">
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={data.addedOverTime}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -115,7 +120,7 @@ export default function AnalyticsPage() {
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Questions Completed Over Time">
+        <ChartCard title="Questions Completed Over Time" icon="✅">
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={data.completedOverTime}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -127,7 +132,7 @@ export default function AnalyticsPage() {
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Progress by Person">
+        <ChartCard title="Progress by Person" icon="🧑‍💻">
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={data.progressByPerson}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -143,7 +148,7 @@ export default function AnalyticsPage() {
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Progress by Subject">
+        <ChartCard title="Progress by Subject" icon="📚">
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={data.progressBySubject}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -159,7 +164,7 @@ export default function AnalyticsPage() {
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Completed vs Pending (Overall)">
+        <ChartCard title="Completed vs Pending (Overall)" icon="🥧">
           <ResponsiveContainer width="100%" height={280}>
             <PieChart>
               <Pie data={pieData} dataKey="value" nameKey="name" outerRadius={90} label>
@@ -177,10 +182,18 @@ export default function AnalyticsPage() {
   );
 }
 
-function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
+function ChartCard({
+  title,
+  icon,
+  children,
+}: {
+  title: string;
+  icon?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">{title}</h2>
+    <div className="rounded-2xl border border-slate-200/70 bg-white p-5 shadow-soft">
+      <CardHeader title={title} icon={icon} />
       {children}
     </div>
   );

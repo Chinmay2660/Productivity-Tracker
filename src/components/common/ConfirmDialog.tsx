@@ -1,6 +1,7 @@
 "use client";
 
 import Modal from "./Modal";
+import Button from "./Button";
 
 export default function ConfirmDialog({
   open,
@@ -23,20 +24,12 @@ export default function ConfirmDialog({
     <Modal open={open} onClose={onCancel} title={title} widthClassName="max-w-sm">
       <p className="text-sm text-slate-600">{message}</p>
       <div className="mt-6 flex justify-end gap-2">
-        <button
-          onClick={onCancel}
-          className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-        >
+        <Button variant="outline" onClick={onCancel}>
           Cancel
-        </button>
-        <button
-          onClick={onConfirm}
-          className={`rounded-md px-3 py-1.5 text-sm font-medium text-white ${
-            danger ? "bg-red-600 hover:bg-red-700" : "bg-slate-900 hover:bg-slate-800"
-          }`}
-        >
+        </Button>
+        <Button variant={danger ? "danger" : "secondary"} onClick={onConfirm}>
           {confirmLabel}
-        </button>
+        </Button>
       </div>
     </Modal>
   );

@@ -1,9 +1,11 @@
 "use client";
 
+import clsx from "clsx";
 import { Category } from "@/types/category";
 import { Person } from "@/types/person";
 import { ProgressStatus } from "@/types/progress";
 import { STATUS_ORDER, STATUS_META } from "@/lib/utils";
+import Card from "@/components/common/Card";
 
 export type QuickFilter = "today" | "yesterday" | "week" | "month" | "all" | "custom";
 
@@ -39,56 +41,60 @@ export default function FilterBar({
   showSearch?: boolean;
 }) {
   return (
-    <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
-      <div className="flex flex-wrap gap-1.5">
-        {QUICK_FILTERS.map((qf) => (
+    <Card className="space-y-3.5" padded={false}>
+      <div className="p-4 pb-0">
+        <div className="flex flex-wrap gap-1.5">
+          {QUICK_FILTERS.map((qf) => (
+            <button
+              key={qf.key}
+              onClick={() => onChange({ ...filters, quickFilter: qf.key })}
+              className={clsx(
+                "rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
+                filters.quickFilter === qf.key
+                  ? "bg-brand-gradient text-white shadow-sm"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              )}
+            >
+              {qf.label}
+            </button>
+          ))}
           <button
-            key={qf.key}
-            onClick={() => onChange({ ...filters, quickFilter: qf.key })}
-            className={`rounded-full px-3 py-1 text-xs font-medium ${
-              filters.quickFilter === qf.key
-                ? "bg-slate-900 text-white"
+            onClick={() => onChange({ ...filters, quickFilter: "custom" })}
+            className={clsx(
+              "rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
+              filters.quickFilter === "custom"
+                ? "bg-brand-gradient text-white shadow-sm"
                 : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            }`}
+            )}
           >
-            {qf.label}
+            Custom Range
           </button>
-        ))}
-        <button
-          onClick={() => onChange({ ...filters, quickFilter: "custom" })}
-          className={`rounded-full px-3 py-1 text-xs font-medium ${
-            filters.quickFilter === "custom"
-              ? "bg-slate-900 text-white"
-              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-          }`}
-        >
-          Custom Range
-        </button>
+        </div>
       </div>
 
       {filters.quickFilter === "custom" && (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 px-4">
           <input
             type="date"
             value={filters.customStart}
             onChange={(e) => onChange({ ...filters, customStart: e.target.value })}
-            className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+            className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:border-brand-blue focus:outline-none"
           />
           <span className="text-sm text-slate-400">to</span>
           <input
             type="date"
             value={filters.customEnd}
             onChange={(e) => onChange({ ...filters, customEnd: e.target.value })}
-            className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+            className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:border-brand-blue focus:outline-none"
           />
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 p-4 pt-0">
         <select
           value={filters.personId}
           onChange={(e) => onChange({ ...filters, personId: e.target.value })}
-          className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm"
+          className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm focus:border-brand-blue focus:outline-none"
         >
           <option value="">All People</option>
           {people.map((p) => (
@@ -101,7 +107,7 @@ export default function FilterBar({
         <select
           value={filters.categoryId}
           onChange={(e) => onChange({ ...filters, categoryId: e.target.value })}
-          className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm"
+          className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm focus:border-brand-blue focus:outline-none"
         >
           <option value="">All Subjects</option>
           {categories.map((c) => (
@@ -114,7 +120,7 @@ export default function FilterBar({
         <select
           value={filters.status}
           onChange={(e) => onChange({ ...filters, status: e.target.value as ProgressStatus | "" })}
-          className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm"
+          className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm focus:border-brand-blue focus:outline-none"
         >
           <option value="">All Statuses</option>
           {STATUS_ORDER.map((s) => (
@@ -129,11 +135,11 @@ export default function FilterBar({
             value={filters.search}
             onChange={(e) => onChange({ ...filters, search: e.target.value })}
             placeholder="Search questions..."
-            className="min-w-[180px] flex-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm"
+            className="min-w-[180px] flex-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm focus:border-brand-blue focus:outline-none"
           />
         )}
       </div>
-    </div>
+    </Card>
   );
 }
 

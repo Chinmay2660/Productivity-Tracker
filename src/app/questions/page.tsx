@@ -12,6 +12,7 @@ import QuestionsTable from "@/components/questions/QuestionsTable";
 import QuestionFormModal from "@/components/questions/QuestionFormModal";
 import QuestionDetailsModal from "@/components/questions/QuestionDetailsModal";
 import QuestionEditModal from "@/components/questions/QuestionEditModal";
+import Button from "@/components/common/Button";
 
 export default function QuestionsPage() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -77,15 +78,12 @@ export default function QuestionsPage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Questions</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Questions</h1>
           <p className="text-sm text-slate-500">All questions across every subject and person.</p>
         </div>
-        <button
-          onClick={() => setAddOpen(true)}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-        >
-          + Add Question
-        </button>
+        <Button onClick={() => setAddOpen(true)}>
+          <span className="text-base leading-none">+</span> Add Question
+        </Button>
       </div>
 
       <div className="mb-4">

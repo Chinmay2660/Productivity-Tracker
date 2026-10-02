@@ -4,6 +4,8 @@ import { useState } from "react";
 import toast from "react-hot-toast";
 import Modal from "@/components/common/Modal";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
+import Button from "@/components/common/Button";
+import Avatar from "@/components/common/Avatar";
 import { TaskWithDetails } from "@/types/task";
 import { ProgressStatus } from "@/types/progress";
 import { StatusSelect } from "@/components/common/StatusBadge";
@@ -65,10 +67,10 @@ export default function QuestionDetailsModal({
       <Modal open={!!task} onClose={onClose} title="Question Details" widthClassName="max-w-xl">
         <div className="space-y-5">
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-700">
+            <span className="rounded-full bg-brand-blue/10 px-2.5 py-1 font-medium text-brand-blue">
               {task.category?.name || "Unknown"}
             </span>
-            <span>{formatDate(task.date)}</span>
+            <span className="flex items-center gap-1">📅 {formatDate(task.date)}</span>
           </div>
 
           {task.content && (
@@ -76,7 +78,7 @@ export default function QuestionDetailsModal({
               <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
                 Question
               </p>
-              <p className="whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm text-slate-800">
+              <p className="whitespace-pre-wrap rounded-xl border border-slate-100 bg-slate-50 p-3.5 text-sm leading-relaxed text-slate-800">
                 {task.content}
               </p>
             </div>
@@ -91,7 +93,7 @@ export default function QuestionDetailsModal({
                 href={task.link}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-brand-blue/20 bg-brand-blue/5 px-3 py-1.5 text-sm font-medium text-brand-blue hover:bg-brand-blue/10"
               >
                 🔗 Open Link
               </a>
@@ -107,9 +109,13 @@ export default function QuestionDetailsModal({
                 <p className="text-sm text-slate-400">No one assigned yet.</p>
               )}
               {task.progress.map((entry) => (
-                <div key={entry._id} className="rounded-lg border border-slate-200 p-3">
+                <div
+                  key={entry._id}
+                  className="rounded-xl border border-slate-200 p-3 transition-colors hover:border-slate-300"
+                >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium text-slate-800">
+                    <span className="flex items-center gap-2 text-sm font-medium text-slate-800">
+                      <Avatar name={entry.person?.name || "?"} size="sm" />
                       {entry.person?.name || "Unknown"}
                     </span>
                     <StatusSelect
@@ -124,14 +130,11 @@ export default function QuestionDetailsModal({
                         setRemarkDrafts((prev) => ({ ...prev, [entry._id]: e.target.value }))
                       }
                       placeholder="Add a remark..."
-                      className="flex-1 rounded-md border border-slate-300 px-2.5 py-1 text-xs focus:border-slate-500 focus:outline-none"
+                      className="flex-1 rounded-lg border border-slate-300 px-2.5 py-1 text-xs focus:border-brand-blue focus:outline-none"
                     />
-                    <button
-                      onClick={() => saveRemark(entry._id)}
-                      className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium hover:bg-slate-50"
-                    >
+                    <Button variant="outline" size="sm" onClick={() => saveRemark(entry._id)}>
                       Save
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ))}
@@ -139,18 +142,12 @@ export default function QuestionDetailsModal({
           </div>
 
           <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-            <button
-              onClick={() => onEdit(task)}
-              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
+            <Button variant="outline" onClick={() => onEdit(task)}>
               Edit
-            </button>
-            <button
-              onClick={() => setConfirmDelete(true)}
-              className="rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50"
-            >
+            </Button>
+            <Button variant="dangerOutline" onClick={() => setConfirmDelete(true)}>
               Delete
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>

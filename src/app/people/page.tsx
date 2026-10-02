@@ -6,6 +6,9 @@ import { apiGet, apiPatch, apiPost } from "@/lib/api";
 import { Person } from "@/types/person";
 import { LoadingState, ErrorState, EmptyState } from "@/components/common/StateViews";
 import PersonFormModal from "@/components/people/PersonFormModal";
+import Button from "@/components/common/Button";
+import Card from "@/components/common/Card";
+import Avatar from "@/components/common/Avatar";
 
 export default function PeoplePage() {
   const [people, setPeople] = useState<Person[]>([]);
@@ -62,82 +65,79 @@ export default function PeoplePage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">People</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">People</h1>
           <p className="text-sm text-slate-500">Manage the people practicing subjects together.</p>
         </div>
-        <button
+        <Button
           onClick={() => {
             setEditing(null);
             setModalOpen(true);
           }}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
         >
-          + Add Person
-        </button>
+          <span className="text-base leading-none">+</span> Add Person
+        </Button>
       </div>
 
       {loading && <LoadingState label="Loading people..." />}
       {error && <ErrorState message={error} onRetry={load} />}
       {!loading && !error && people.length === 0 && (
-        <EmptyState title="No people yet" description="Add your first person to get started." />
+        <EmptyState icon="👥" title="No people yet" description="Add your first person to get started." />
       )}
 
       {!loading && !error && people.length > 0 && (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Added</th>
-                <th className="px-4 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {people.map((person) => (
-                <tr key={person._id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium text-slate-900">{person.name}</td>
-                  <td className="px-4 py-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {people.map((person) => (
+            <Card
+              key={person._id}
+              className="flex items-center justify-between transition-shadow hover:shadow-softHover"
+            >
+              <div className="flex items-center gap-3">
+                <Avatar name={person.name} size="lg" />
+                <div>
+                  <p className="font-semibold text-slate-900">{person.name}</p>
+                  <span
+                    className={`mt-0.5 inline-flex items-center gap-1 text-xs font-medium ${
+                      person.isActive ? "text-emerald-600" : "text-slate-400"
+                    }`}
+                  >
                     <span
-                      className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                        person.isActive
-                          ? "bg-green-50 text-green-700"
-                          : "bg-slate-100 text-slate-500"
+                      className={`h-1.5 w-1.5 rounded-full ${
+                        person.isActive ? "bg-emerald-500" : "bg-slate-300"
                       }`}
-                    >
-                      {person.isActive ? "Active" : "Inactive"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-slate-500">
-                    {new Date(person.createdAt).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex justify-end gap-2">
-                      <button
-                        onClick={() => {
-                          setEditing(person);
-                          setModalOpen(true);
-                        }}
-                        className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium hover:bg-slate-50"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => toggleActive(person)}
-                        className={`rounded-md px-2.5 py-1 text-xs font-medium ${
-                          person.isActive
-                            ? "border border-amber-300 text-amber-700 hover:bg-amber-50"
-                            : "border border-green-300 text-green-700 hover:bg-green-50"
-                        }`}
-                      >
-                        {person.isActive ? "Deactivate" : "Reactivate"}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    />
+                    {person.isActive ? "Active" : "Inactive"}
+                  </span>
+                  <p className="mt-0.5 text-[11px] text-slate-400">
+                    Added {new Date(person.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setEditing(person);
+                    setModalOpen(true);
+                  }}
+                >
+                  Edit
+                </Button>
+                <Button
+                  variant={person.isActive ? "dangerOutline" : "outline"}
+                  size="sm"
+                  onClick={() => toggleActive(person)}
+                  className={
+                    !person.isActive
+                      ? "!border-emerald-300 !text-emerald-700 hover:!bg-emerald-50"
+                      : undefined
+                  }
+                >
+                  {person.isActive ? "Deactivate" : "Reactivate"}
+                </Button>
+              </div>
+            </Card>
+          ))}
         </div>
       )}
 
