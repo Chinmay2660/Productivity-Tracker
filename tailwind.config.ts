@@ -1,6 +1,7 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
+  darkMode: "class",
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -9,46 +10,42 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["var(--font-inter)", "ui-sans-serif", "system-ui", "sans-serif"],
+        sans: ["var(--font-jakarta)", "ui-sans-serif", "system-ui", "sans-serif"],
       },
       colors: {
         brand: {
-          blue: "#25A6EE",
-          moderateBlue: "#4883CF",
-          violet: "#A361CF",
-          pink: "#CB41A2",
-          cyan: "#13C8A5",
-          softBlue: "#66C1F3",
+          DEFAULT: "#C45C26",
+          hover: "#A84D1F",
+          light: "#F0E4DA",
+          muted: "#8B6F5C",
+          sage: "#3D6B59",
         },
-        status: {
-          notStarted: "#FEF0EF",
-          notStartedBorder: "#F8C9C6",
-          notStartedText: "#C5312B",
-          notStartedDot: "#EB5953",
-          inProgress: "#FEF8E7",
-          inProgressBorder: "#F6E2A6",
-          inProgressText: "#92710B",
-          inProgressDot: "#F3BF39",
-          done: "#EBF7EF",
-          doneBorder: "#BEE4CC",
-          doneText: "#1F7A42",
-          doneDot: "#46AF6A",
-          revised: "#FBEBF6",
-          revisedBorder: "#F2C3E6",
-          revisedText: "#9E2E82",
-          revisedDot: "#CB41A2",
+        surface: {
+          DEFAULT: "var(--surface)",
+          muted: "var(--surface-muted)",
         },
+        foreground: "var(--foreground)",
+        muted: "var(--muted)",
+        accent: "var(--accent)",
+        success: "var(--success)",
+        warning: "var(--warning)",
+        danger: "var(--danger)",
+      },
+      spacing: {
+        page: "1.5rem",
+        section: "1.5rem",
       },
       boxShadow: {
-        soft: "0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px -12px rgba(15, 23, 42, 0.12)",
-        softHover: "0 2px 4px rgba(15, 23, 42, 0.06), 0 16px 32px -14px rgba(15, 23, 42, 0.18)",
-      },
-      backgroundImage: {
-        "brand-gradient": "linear-gradient(135deg, #25A6EE 0%, #A361CF 100%)",
-        "brand-gradient-soft": "linear-gradient(135deg, #EAF7FF 0%, #F6EEFB 100%)",
+        soft: "0 1px 2px rgba(28, 25, 23, 0.03), 0 4px 20px -4px rgba(28, 25, 23, 0.07)",
+        softHover: "0 2px 4px rgba(28, 25, 23, 0.05), 0 8px 24px -6px rgba(28, 25, 23, 0.1)",
+        focus: "0 0 0 3px var(--ring)",
+        panel: "0 1px 3px rgba(0, 0, 0, 0.12), 0 8px 24px -8px rgba(0, 0, 0, 0.2)",
       },
       borderRadius: {
-        xl2: "1.25rem",
+        DEFAULT: "0.5rem",
+        lg: "0.625rem",
+        xl: "0.75rem",
+        "2xl": "1rem",
       },
     },
   },

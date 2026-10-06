@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { ensureDatabaseIndexes } from "@/lib/db-indexes";
 
 interface MongooseCache {
   conn: typeof mongoose | null;
@@ -12,11 +13,17 @@ declare global {
 const cached: MongooseCache = global._mongooseCache ?? { conn: null, promise: null };
 global._mongooseCache = cached;
 
-export async function connectToDatabase(): Promise<typeof mongoose> {
-  if (cached.conn) {
-    return cached.conn;
-  }
+let indexesReady: Promise<void> | null = null;
 
+async function runIndexMigration(): Promise<void> {
+  if (!indexesReady) {
+    // ponytail: don't reset on failure — retries were re-triggering broken index builds
+    indexesReady = ensureDatabaseIndexes();
+  }
+  await indexesReady;
+}
+
+export async function connectToDatabase(): Promise<typeof mongoose> {
   const MONGODB_URI = process.env.MONGODB_URI;
   if (!MONGODB_URI) {
     throw new Error("Missing MONGODB_URI environment variable");
@@ -29,9 +36,13 @@ export async function connectToDatabase(): Promise<typeof mongoose> {
   }
 
   try {
-    cached.conn = await cached.promise;
+    if (!cached.conn) {
+      cached.conn = await cached.promise;
+    }
+    await runIndexMigration();
   } catch (err) {
     cached.promise = null;
+    cached.conn = null;
     throw err;
   }
 

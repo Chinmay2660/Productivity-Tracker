@@ -1,159 +1,55 @@
-import { Types, PipelineStage } from "mongoose";
-import { connectToDatabase } from "@/lib/mongodb";
-import Task from "@/models/Task";
-import Progress from "@/models/Progress";
-import Person from "@/models/Person";
-import Category from "@/models/Category";
-import { jsonError, jsonOk } from "@/lib/utils";
+import { withAuth } from "@/lib/api-handler";
+import { jsonOk, jsonError } from "@/lib/utils";
+import { serializeDoc, ensureQuestionTodoTasks } from "@/lib/services";
+import PrepTask from "@/models/PrepTask";
+import Subject from "@/models/Subject";
+import Topic from "@/models/Topic";
 
-export async function GET(request: Request) {
-  await connectToDatabase();
+export const GET = withAuth(async (request, { userId }) => {
   const { searchParams } = new URL(request.url);
-
-  const start = searchParams.get("start");
-  const end = searchParams.get("end");
-  const categoryId = searchParams.get("categoryId");
-  const personId = searchParams.get("personId");
+  const groupId = searchParams.get("groupId");
   const status = searchParams.get("status");
-  const search = searchParams.get("search");
 
-  const match: Record<string, unknown> = {};
-  if (start || end) {
-    const dateFilter: Record<string, Date> = {};
-    if (start) dateFilter.$gte = new Date(start);
-    if (end) dateFilter.$lte = new Date(end);
-    match.date = dateFilter;
-  }
-  if (categoryId) {
-    match.categoryId = new Types.ObjectId(categoryId);
-  }
-  if (search) {
-    match.$or = [
-      { content: { $regex: search, $options: "i" } },
-      { link: { $regex: search, $options: "i" } },
-    ];
-  }
+  const filter: Record<string, unknown> = { userId };
+  if (groupId) filter.groupId = groupId;
+  if (status) filter.status = status;
 
-  const pipeline: PipelineStage[] = [
-    { $match: match },
-    { $sort: { date: -1, createdAt: -1 } },
-    {
-      $lookup: {
-        from: Category.collection.name,
-        localField: "categoryId",
-        foreignField: "_id",
-        as: "category",
-      },
-    },
-    { $unwind: { path: "$category", preserveNullAndEmptyArrays: true } },
-    {
-      $lookup: {
-        from: Progress.collection.name,
-        localField: "_id",
-        foreignField: "taskId",
-        as: "progress",
-      },
-    },
-  ];
+  if (groupId) await ensureQuestionTodoTasks(userId, groupId);
 
-  if (personId) {
-    pipeline.push({
-      $match: { "progress.personId": new Types.ObjectId(personId) },
-    });
-  }
+  const tasks = await PrepTask.find(filter).sort({ priority: 1, dueDate: 1 }).lean();
+  const subjects = await Subject.find({ _id: { $in: tasks.map((t) => t.subjectId).filter(Boolean) } }).lean();
+  const topics = await Topic.find({ _id: { $in: tasks.map((t) => t.topicId).filter(Boolean) } }).lean();
+  const subjectMap = new Map(subjects.map((s) => [String(s._id), s.name]));
+  const topicMap = new Map(topics.map((t) => [String(t._id), t.name]));
 
-  if (status) {
-    pipeline.push({
-      $match: { "progress.status": status },
-    });
-  }
+  return jsonOk(
+    tasks.map((t) => ({
+      ...serializeDoc(t),
+      subjectName: t.subjectId ? subjectMap.get(String(t.subjectId)) : undefined,
+      topicName: t.topicId ? topicMap.get(String(t.topicId)) : undefined,
+    }))
+  );
+}, "Failed to fetch tasks");
 
-  const tasks = await Task.aggregate(pipeline);
-
-  const people = await Person.find({}).lean();
-  const peopleMap = new Map(people.map((p) => [p._id.toString(), p]));
-
-  const shaped = tasks.map((task) => ({
-    ...task,
-    progress: (task.progress || []).map((p: { personId: Types.ObjectId }) => ({
-      ...p,
-      person: peopleMap.get(p.personId.toString()) || null,
-    })),
-  }));
-
-  return jsonOk(shaped);
-}
-
-export async function POST(request: Request) {
-  await connectToDatabase();
+export const POST = withAuth(async (request, { userId }) => {
   const body = await request.json();
+  const { groupId, title, description, priority, subjectId, topicId, dueDate, estimatedMinutes } = body;
 
-  const { date, categoryId, content, link, assignTo, questions } = body;
-
-  if (!date || !categoryId) {
-    return jsonError("Date and subject are required", 422);
+  if (!groupId || !title?.trim()) {
+    return jsonError("groupId and title are required");
   }
 
-  const assignedPersonIds: string[] = Array.isArray(assignTo) ? assignTo : [];
-
-  // Bulk mode: an array of { content?, link? } question entries for the same date/category
-  if (Array.isArray(questions) && questions.length > 0) {
-    const validEntries = questions.filter(
-      (q: { content?: string; link?: string }) =>
-        (q.content && q.content.trim()) || (q.link && q.link.trim())
-    );
-
-    if (validEntries.length === 0) {
-      return jsonError("Each question must have content or a link", 422);
-    }
-
-    const createdTasks = await Task.insertMany(
-      validEntries.map((q: { content?: string; link?: string }) => ({
-        date: new Date(date),
-        categoryId,
-        content: q.content?.trim() || undefined,
-        link: q.link?.trim() || undefined,
-      }))
-    );
-
-    if (assignedPersonIds.length > 0) {
-      const progressDocs = createdTasks.flatMap((task) =>
-        assignedPersonIds.map((personId) => ({
-          taskId: task._id,
-          personId,
-          status: "NOT_STARTED",
-        }))
-      );
-      await Progress.insertMany(progressDocs);
-    }
-
-    return jsonOk(createdTasks, 201);
-  }
-
-  // Single task mode
-  const trimmedContent = typeof content === "string" ? content.trim() : "";
-  const trimmedLink = typeof link === "string" ? link.trim() : "";
-
-  if (!trimmedContent && !trimmedLink) {
-    return jsonError("Provide a question/content or a reference link", 422);
-  }
-
-  const task = await Task.create({
-    date: new Date(date),
-    categoryId,
-    content: trimmedContent || undefined,
-    link: trimmedLink || undefined,
+  const task = await PrepTask.create({
+    groupId,
+    userId,
+    title: title.trim(),
+    description: description?.trim(),
+    priority: priority ?? "medium",
+    subjectId,
+    topicId,
+    dueDate: dueDate ? new Date(dueDate) : undefined,
+    estimatedMinutes: estimatedMinutes ?? 30,
   });
 
-  if (assignedPersonIds.length > 0) {
-    await Progress.insertMany(
-      assignedPersonIds.map((personId) => ({
-        taskId: task._id,
-        personId,
-        status: "NOT_STARTED",
-      }))
-    );
-  }
-
-  return jsonOk(task, 201);
-}
+  return jsonOk(serializeDoc(task), 201);
+}, "Failed to create task");

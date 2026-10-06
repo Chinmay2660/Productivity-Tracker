@@ -1,132 +1,449 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { apiGet } from "@/lib/api";
-import { Category } from "@/types/category";
-import { Person } from "@/types/person";
-import { TaskWithDetails } from "@/types/task";
-import { resolveFilterRange } from "@/lib/utils";
-import { LoadingState, ErrorState, EmptyState } from "@/components/common/StateViews";
-import FilterBar, { DEFAULT_FILTERS, FiltersState } from "@/components/questions/FilterBar";
-import QuestionsTable from "@/components/questions/QuestionsTable";
-import QuestionFormModal from "@/components/questions/QuestionFormModal";
-import QuestionDetailsModal from "@/components/questions/QuestionDetailsModal";
-import QuestionEditModal from "@/components/questions/QuestionEditModal";
-import Button from "@/components/common/Button";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import Link from "next/link";
+import { useUser } from "@/components/providers/UserProvider";
+import { apiGet, apiPost, apiPatch, apiDelete, getErrorMessage } from "@/lib/api";
+import Button from "@/components/ui/Button";
+import Chip from "@/components/ui/Chip";
+import Modal from "@/components/ui/Modal";
+import MotivationBanner from "@/components/dashboard/MotivationBanner";
+import {
+  TaskListSkeleton,
+  QuestionListSkeleton,
+  ErrorState,
+  EmptyState,
+} from "@/components/ui/StateViews";
+import QuestionListView from "@/components/questions/QuestionListView";
+import {
+  formatSubjectTrack,
+  toDateInputValue,
+  QUESTION_DATE_PERIODS,
+  normalizeQuestionStatus,
+  type QuestionDatePeriod,
+  type QuestionSortField,
+  type QuestionSortDir,
+} from "@/lib/utils";
+import toast from "react-hot-toast";
+import {
+  triggerQuestionPointsBurst,
+  type QuestionPointBurst,
+} from "@/lib/question-points-burst";
+import type { ContentScope, PracticeQuestion, QuestionStatus, Subject } from "@/types";
+
+type QuestionWithSubject = PracticeQuestion & { subjectName: string; trackLabel: string };
+
+type PagedQuestions = {
+  items: QuestionWithSubject[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
+const PAGE_SIZE = 10;
 
 export default function QuestionsPage() {
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [people, setPeople] = useState<Person[]>([]);
-  const [tasks, setTasks] = useState<TaskWithDetails[]>([]);
+  const { user } = useUser();
+  const [questions, setQuestions] = useState<QuestionWithSubject[]>([]);
+  const [pointBurst, setPointBurst] = useState<QuestionPointBurst | null>(null);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [datePeriod, setDatePeriod] = useState<QuestionDatePeriod>("today");
+  const [sortBy, setSortBy] = useState<QuestionSortField>("date");
+  const [sortDir, setSortDir] = useState<QuestionSortDir>("desc");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState<FiltersState>({ ...DEFAULT_FILTERS, quickFilter: "all" });
-  const [addOpen, setAddOpen] = useState(false);
-  const [selectedTask, setSelectedTask] = useState<TaskWithDetails | null>(null);
-  const [editingTask, setEditingTask] = useState<TaskWithDetails | null>(null);
+  const [initialLoad, setInitialLoad] = useState(true);
+  const [error, setError] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [content, setContent] = useState("");
+  const [subjectId, setSubjectId] = useState("");
+  const [link, setLink] = useState("");
+  const [practiceDate, setPracticeDate] = useState(toDateInputValue());
+  const [scope, setScope] = useState<ContentScope>("group");
 
-  async function loadStaticData() {
-    const [cats, ppl] = await Promise.all([
-      apiGet<Category[]>("/api/categories"),
-      apiGet<Person[]>("/api/people"),
-    ]);
-    setCategories(cats);
-    setPeople(ppl);
-  }
+  const groupSubjects = useMemo(
+    () => subjects.filter((s) => s.scope === "group"),
+    [subjects]
+  );
+  const personalSubjects = useMemo(
+    () => subjects.filter((s) => s.scope === "personal"),
+    [subjects]
+  );
+  const modalSubjects = scope === "group" ? groupSubjects : personalSubjects;
 
-  async function loadTasks() {
+  const load = useCallback(async () => {
+    if (!user?.activeGroupId) return;
     setLoading(true);
-    setError(null);
     try {
-      const { start, end } = resolveFilterRange(filters);
-      const params = new URLSearchParams();
-      if (start) params.set("start", start);
-      if (end) params.set("end", end);
-      if (filters.categoryId) params.set("categoryId", filters.categoryId);
-      if (filters.personId) params.set("personId", filters.personId);
-      if (filters.status) params.set("status", filters.status);
-      if (filters.search) params.set("search", filters.search);
+      const questionUrl = `/api/practice-questions?groupId=${user.activeGroupId}&scope=all&page=${page}&limit=${PAGE_SIZE}&period=${datePeriod}&sortBy=${sortBy}&sortDir=${sortDir}`;
 
-      const data = await apiGet<TaskWithDetails[]>(`/api/tasks?${params.toString()}`);
-      setTasks(data);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load questions");
+      const [questionData, subjectData] = await Promise.all([
+        apiGet<PagedQuestions>(questionUrl),
+        apiGet<Subject[]>(`/api/subjects?groupId=${user.activeGroupId}`),
+      ]);
+      setQuestions(questionData.items);
+      setTotal(questionData.total);
+      setSubjects(subjectData);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load questions");
     } finally {
       setLoading(false);
+      setInitialLoad(false);
     }
-  }
+  }, [user, page, datePeriod, sortBy, sortDir]);
+
+  useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    loadStaticData();
-  }, []);
+    document.getElementById("app-main")?.scrollTo({ top: 0 });
+  }, [page]);
 
   useEffect(() => {
-    loadTasks();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters]);
+    const available = scope === "group" ? groupSubjects : personalSubjects;
+    if (available.length > 0 && !available.some((s) => s._id === subjectId)) {
+      setSubjectId(available[0]._id);
+    }
+  }, [scope, groupSubjects, personalSubjects, subjectId]);
 
-  const activePeople = useMemo(() => people.filter((p) => p.isActive), [people]);
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  async function refreshSelectedTask() {
-    if (!selectedTask) return;
-    const fresh = await apiGet<TaskWithDetails>(`/api/tasks/${selectedTask._id}`);
-    setSelectedTask(fresh);
-    loadTasks();
+  const handleSort = (field: QuestionSortField) => {
+    if (sortBy === field) {
+      setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(field);
+      setSortDir(field === "date" ? "desc" : "asc");
+    }
+    setPage(1);
+  };
+
+  const resetForm = () => {
+    setEditingId(null);
+    setContent("");
+    setLink("");
+    setPracticeDate(toDateInputValue());
+    setScope("group");
+    setSubjectId(groupSubjects[0]?._id ?? personalSubjects[0]?._id ?? "");
+  };
+
+  const openCreateModal = () => {
+    resetForm();
+    setShowModal(true);
+  };
+
+  const openEditModal = (q: QuestionWithSubject) => {
+    setEditingId(q._id);
+    setContent(q.content);
+    setLink(q.link ?? "");
+    setPracticeDate(toDateInputValue(q.practiceDate ?? q.createdAt));
+    setScope(q.scope);
+    setSubjectId(q.subjectId);
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    resetForm();
+  };
+
+  const saveQuestion = async () => {
+    if (!content.trim() || !subjectId || !user?.activeGroupId) return;
+    setSaving(true);
+    try {
+      if (editingId) {
+        const updated = await apiPatch<QuestionWithSubject>(`/api/practice-questions/${editingId}`, {
+          content,
+          link: link.trim() || undefined,
+          subjectId,
+          practiceDate,
+        });
+        const subject = subjects.find((s) => s._id === subjectId);
+        setQuestions((prev) =>
+          prev.map((q) =>
+            q._id === editingId
+              ? {
+                  ...q,
+                  ...updated,
+                  content,
+                  link: link.trim() || undefined,
+                  subjectId,
+                  practiceDate,
+                  subjectName: subject?.name ?? q.subjectName,
+                  trackLabel: subject ? formatSubjectTrack(subject) : q.trackLabel,
+                }
+              : q
+          )
+        );
+        toast.success("Question updated");
+      } else {
+        await apiPost("/api/practice-questions", {
+          groupId: user.activeGroupId,
+          subjectId,
+          content,
+          link: link.trim() || undefined,
+          scope,
+          practiceDate,
+        });
+        toast.success("Question added");
+        if (page !== 1) setPage(1);
+        else load();
+      }
+      closeModal();
+    } catch (err) {
+      toast.error(getErrorMessage(err, editingId ? "Failed to update question" : "Failed to add question"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateStatus = async (id: string, status: QuestionStatus) => {
+    const normalized = normalizeQuestionStatus(status);
+    let previousStatus: QuestionStatus | undefined;
+    setQuestions((prev) => {
+      const current = prev.find((q) => q._id === id);
+      if (!current) return prev;
+      previousStatus = current.status;
+      return prev.map((q) => (q._id === id ? { ...q, status: normalized } : q));
+    });
+    if (!previousStatus) return;
+
+    try {
+      const updated = await apiPatch<{ pointsEarnedNow?: number }>(
+        `/api/practice-questions/${id}`,
+        { status: normalized }
+      );
+      triggerQuestionPointsBurst(setPointBurst, id, updated.pointsEarnedNow);
+      if (normalized === "add_to_todo") {
+        toast.success("Added to Tasks");
+      }
+    } catch (err) {
+      setQuestions((prev) =>
+        prev.map((q) => (q._id === id ? { ...q, status: previousStatus! } : q))
+      );
+      toast.error(getErrorMessage(err, "Failed to update question"));
+    }
+  };
+
+  const deleteQuestion = async (id: string) => {
+    try {
+      await apiDelete(`/api/practice-questions/${id}`);
+      toast.success("Question deleted");
+      const remainingOnPage = questions.length - 1;
+      const newTotal = total - 1;
+      const newTotalPages = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
+      if (remainingOnPage === 0 && page > 1 && page > newTotalPages) {
+        setPage(newTotalPages);
+      } else {
+        load();
+      }
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to delete question"));
+    }
+  };
+
+  if (initialLoad && loading) {
+    return (
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <div className="h-8 w-40 animate-pulse rounded-lg bg-[var(--surface-muted)]" />
+          <div className="h-4 w-64 animate-pulse rounded-lg bg-[var(--surface-muted)]" />
+        </div>
+        <TaskListSkeleton rows={3} />
+        <QuestionListSkeleton />
+      </div>
+    );
   }
+  if (error) return <ErrorState message={error} onRetry={load} />;
 
   return (
-    <div>
-      <div className="mb-6 flex items-center justify-between">
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Questions</h1>
-          <p className="text-sm text-slate-500">All questions across every subject and person.</p>
+          <h1 className="text-2xl font-bold text-[var(--foreground)]">Questions</h1>
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            {total} question{total === 1 ? "" : "s"} — track daily practice progress
+          </p>
         </div>
-        <Button onClick={() => setAddOpen(true)}>
-          <span className="text-base leading-none">+</span> Add Question
+        <Button size="sm" onClick={openCreateModal}>
+          Add Question
         </Button>
       </div>
 
-      <div className="mb-4">
-        <FilterBar filters={filters} onChange={setFilters} categories={categories} people={people} />
+      <MotivationBanner />
+
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap gap-2">
+          {QUESTION_DATE_PERIODS.map(({ id, label }) => (
+            <Chip
+              key={id}
+              variant="brand"
+              active={datePeriod === id}
+              onClick={() => {
+                setDatePeriod(id);
+                setPage(1);
+              }}
+              className="!px-3 !py-1.5 !text-sm"
+            >
+              {label}
+            </Chip>
+          ))}
+        </div>
       </div>
 
-      {loading && <LoadingState label="Loading questions..." />}
-      {error && <ErrorState message={error} onRetry={loadTasks} />}
-      {!loading && !error && tasks.length === 0 && (
+      {questions.length === 0 ? (
         <EmptyState
-          title="No questions found"
-          description="Try adjusting filters or add a new question."
+          title={datePeriod !== "all" ? "No matching questions" : "No questions yet"}
+          description={
+            datePeriod !== "all"
+              ? "Try another period or add a question."
+              : "Add practice questions to track your preparation."
+          }
+          action={<Button onClick={openCreateModal}>Add Question</Button>}
         />
+      ) : (
+        <>
+          <QuestionListView
+            questions={questions}
+            onStatusChange={updateStatus}
+            pointBurst={pointBurst}
+            onEdit={openEditModal}
+            onDelete={deleteQuestion}
+            showScope
+            showActions
+            sortBy={sortBy}
+            sortDir={sortDir}
+            onSort={handleSort}
+            loading={loading}
+          />
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-[var(--muted)]">
+              Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
+              {datePeriod !== "all" ? ` · ${QUESTION_DATE_PERIODS.find((p) => p.id === datePeriod)?.label}` : ""}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page <= 1 || loading}
+                onClick={() => setPage((p) => p - 1)}
+              >
+                Previous
+              </Button>
+              <span className="px-2 text-sm text-[var(--muted)]">
+                Page {page} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page >= totalPages || loading}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        </>
       )}
-      {!loading && !error && tasks.length > 0 && (
-        <QuestionsTable tasks={tasks} people={activePeople} onRowClick={setSelectedTask} />
-      )}
 
-      <QuestionFormModal
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        onSaved={loadTasks}
-        categories={categories.filter((c) => c.isActive)}
-        people={activePeople}
-      />
-
-      <QuestionDetailsModal
-        task={selectedTask}
-        onClose={() => setSelectedTask(null)}
-        onChanged={refreshSelectedTask}
-        onEdit={(task) => {
-          setSelectedTask(null);
-          setEditingTask(task);
-        }}
-      />
-
-      <QuestionEditModal
-        task={editingTask}
-        onClose={() => setEditingTask(null)}
-        onSaved={loadTasks}
-        categories={categories.filter((c) => c.isActive)}
-        people={activePeople}
-      />
+      <Modal
+        open={showModal}
+        onClose={closeModal}
+        title={editingId ? "Edit Question" : "Add Question"}
+      >
+        <div className="space-y-4">
+          {!editingId && (
+            <div>
+              <label className="text-sm font-medium">Visibility</label>
+              <select
+                value={scope}
+                onChange={(e) => setScope(e.target.value as ContentScope)}
+                className="mt-1 w-full rounded-lg border border-[var(--input-border)] px-4 py-2 text-sm dark:border-[var(--input-border)] dark:bg-[var(--input-bg)]"
+              >
+                <option value="group">Group — shared with everyone</option>
+                <option value="personal">Personal — only you</option>
+              </select>
+            </div>
+          )}
+          {editingId && (
+            <p className="text-sm text-[var(--muted)]">
+              {scope === "group" ? "Group question — visible to everyone" : "Personal question — only you"}
+            </p>
+          )}
+          <div>
+            <label className="text-sm font-medium">Practice date</label>
+            <input
+              type="date"
+              value={practiceDate}
+              onChange={(e) => setPracticeDate(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-[var(--input-border)] px-4 py-2 text-sm dark:border-[var(--input-border)] dark:bg-[var(--input-bg)]"
+            />
+          </div>
+          {(editingId ? subjects.filter((s) => s.scope === scope) : modalSubjects).length === 0 ? (
+            <p className="text-sm text-[var(--muted)]">
+              No {scope} subjects yet.{" "}
+              <Link href="/subjects" className="text-brand hover:underline">Create one</Link> first.
+            </p>
+          ) : (
+            <div>
+              <label className="text-sm font-medium">Track</label>
+              <select
+                value={subjectId}
+                onChange={(e) => setSubjectId(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-[var(--input-border)] px-4 py-2 text-sm dark:border-[var(--input-border)] dark:bg-[var(--input-bg)]"
+              >
+                {(editingId ? subjects.filter((s) => s.scope === scope) : modalSubjects).map((s) => (
+                  <option key={s._id} value={s._id}>
+                    {formatSubjectTrack(s)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div>
+            <label className="text-sm font-medium">Question</label>
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="What is the difference between TCP and UDP?"
+              rows={3}
+              className="mt-1 w-full rounded-lg border border-[var(--input-border)] px-4 py-2 text-sm dark:border-[var(--input-border)] dark:bg-[var(--input-bg)]"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Link (optional)</label>
+            <input
+              type="url"
+              value={link}
+              onChange={(e) => setLink(e.target.value)}
+              placeholder="https://..."
+              className="mt-1 w-full rounded-lg border border-[var(--input-border)] px-4 py-2 text-sm dark:border-[var(--input-border)] dark:bg-[var(--input-bg)]"
+            />
+          </div>
+          {!editingId && (
+            <p className="text-xs text-[var(--muted)]">
+              New questions start as <strong>Not Started</strong>. Use <strong>Add to do</strong> to queue one in Tasks.
+            </p>
+          )}
+          <Button
+            onClick={saveQuestion}
+            className="w-full"
+            disabled={
+              saving ||
+              !content.trim() ||
+              !subjectId ||
+              (editingId
+                ? subjects.filter((s) => s.scope === scope).length === 0
+                : modalSubjects.length === 0)
+            }
+          >
+            {saving ? "Saving…" : editingId ? "Save Changes" : "Save Question"}
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }

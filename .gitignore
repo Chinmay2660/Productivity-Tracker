@@ -4,6 +4,8 @@ out
 build
 .env
 .env.local
+.env.*.local
+!.env.example
 *.log
 .DS_Store
 tsconfig.tsbuildinfo
