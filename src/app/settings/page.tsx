@@ -23,6 +23,7 @@ import Chip from "@/components/ui/Chip";
 import PageHeader from "@/components/ui/PageHeader";
 import { Skeleton } from "@/components/ui/StateViews";
 import { apiPost, getErrorMessage } from "@/lib/api";
+import { normalizeUser } from "@/lib/user";
 import toast from "react-hot-toast";
 import { pickCtcMotivation } from "@/lib/inspiration";
 import type { ThemePreference } from "@/types";
@@ -79,17 +80,18 @@ export default function SettingsPage() {
   const router = useRouter();
   const { user, updateUser, logout } = useUser();
   const { theme, setTheme } = useTheme();
-  const [dailyMinutes, setDailyMinutes] = useState(user?.dailyStudyMinutes ?? 120);
-  const [targetCtc, setTargetCtc] = useState(user?.targetCtcLpa ?? 0);
+  const profile = user ? normalizeUser(user) : null;
+  const [dailyMinutes, setDailyMinutes] = useState(profile?.dailyStudyMinutes ?? 120);
+  const [targetCtc, setTargetCtc] = useState(profile?.targetCtcLpa ?? 0);
   const [newCode, setNewCode] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
 
   useEffect(() => {
-    if (user) {
-      setDailyMinutes(user.dailyStudyMinutes);
-      setTargetCtc(user.targetCtcLpa ?? 0);
-    }
+    if (!user) return;
+    const p = normalizeUser(user);
+    setDailyMinutes(p.dailyStudyMinutes);
+    setTargetCtc(p.targetCtcLpa ?? 0);
   }, [user]);
 
   const ctcPreview = useMemo(
@@ -146,7 +148,7 @@ export default function SettingsPage() {
     router.push("/login");
   };
 
-  if (!user) {
+  if (!user || !profile) {
     return (
       <div className="mx-auto max-w-2xl space-y-4">
         <Skeleton className="h-8 w-32" />
@@ -195,8 +197,8 @@ export default function SettingsPage() {
         </div>
 
         <div className="relative mt-4 grid grid-cols-3 gap-2">
-          <StatPill label="Level" value={user.preparationLevel} />
-          <StatPill label="Streak" value={`${user.studyStreak} days`} />
+          <StatPill label="Level" value={profile.preparationLevel} />
+          <StatPill label="Streak" value={`${profile.studyStreak} days`} />
           <StatPill
             label="Daily goal"
             value={`${Math.floor(dailyMinutes / 60)}h ${dailyMinutes % 60}m`}

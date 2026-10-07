@@ -1,7 +1,7 @@
 import { connectToDatabase } from "@/lib/mongodb";
 import { requireAuthUserId, unauthorized } from "@/lib/api-auth";
 import { jsonOk, jsonError } from "@/lib/utils";
-import { serializeDoc } from "@/lib/services";
+import { normalizeUser } from "@/lib/user";
 import User from "@/models/User";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -32,7 +32,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     const user = await User.findByIdAndUpdate(id, updates, { new: true }).lean();
     if (!user) return jsonError("User not found", 404);
-    return jsonOk(serializeDoc(user));
+    return jsonOk(normalizeUser(user));
   } catch (err) {
     if (err instanceof Error && err.message === "Unauthorized") return unauthorized();
     return jsonError(err instanceof Error ? err.message : "Failed to update user", 500);
