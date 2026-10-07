@@ -1,110 +1,44 @@
-# Technical Productivity Tracker
+# GrowthHub
 
-A full-stack productivity tracker for a small group of people practicing technical subjects
-(DSA, JavaScript Problem Solving, System Design, and any custom subject added later).
+A full-stack questions and accountability tracker for study groups preparing for interviews. Built with Next.js 16, MongoDB, and Tailwind CSS.
 
-Built with **Next.js (App Router) + TypeScript + MongoDB + Mongoose + Tailwind CSS**.
+## What it does
 
-## Architecture Summary
+When you open the app, you immediately see:
 
-- **People** and **Categories/Subjects** are stored in their own MongoDB collections — nothing
-  is hardcoded. Adding a person or a subject from the UI immediately makes it available across
-  the dashboard, filters, statistics, and analytics.
-- **Tasks** (questions) store only `date`, `categoryId`, optional `content`, optional `link`.
-- **Progress** is a separate collection keyed by `(taskId, personId)`, because status is
-  per-person, not global — the same question can be `DONE` for one person and `NOT_STARTED`
-  for another.
-- Dashboard columns, filters, statistics, and analytics charts are all derived at request time
-  from whatever people/categories currently exist in the database.
+- **Interview countdown** — days and hours until your interview
+- **Interview readiness score** — calculated from topic completion, confidence, tasks, mock scores, and study streak
+- **Today's focus plan** — auto-generated daily study priorities
+- **Weak areas** — subjects and topics needing attention
+- **Group accountability** — member readiness, study hours, and task completion
 
-## Prerequisites
+## Features
 
-- Node.js 20+
-- A running MongoDB instance (local or Atlas)
+| Area | Capabilities |
+|------|-------------|
+| **Dashboard** | Countdown, readiness ring, today's plan, weak areas, group leaderboard |
+| **Subjects** | Per-subject completion %, confidence, revision schedule |
+| **Topics** | Status tracking (Not Started → Interview Ready), confidence levels |
+| **Tasks** | Priority-based task management with completion tracking |
+| **Interview Plan** | Auto-generated 14-day preparation timeline |
+| **Groups** | Create/join with codes (`SWITCH-XXXXX`), member roles (owner/admin/member) |
+| **Revision** | Smart revision queue based on weak confidence and spaced repetition |
+| **Focus Timer** | Pomodoro-style sessions linked to subjects/topics |
+| **Mock Interviews** | Log scores, weaknesses, auto-flag topics for revision |
+| **Analytics** | Study hours, subject completion, mock score trends |
+| **Settings** | Theme (light/dark/system), study preferences |
 
-## Setup
+## Getting Started
 
 ```bash
 npm install
 cp .env.example .env.local
-# edit .env.local and set MONGODB_URI
-```
-
-## Seed initial data
-
-Seeds 3 people (Person 1–3) and 3 categories (DSA, JavaScript Problem Solving, System Design).
-Safe to re-run — it skips anything that already exists.
-
-```bash
-npm run seed
-```
-
-## Run the app
-
-```bash
+# Add your MongoDB URI to .env.local
 npm run dev
 ```
 
-Visit http://localhost:3000 — it redirects to `/dashboard`.
+Open [http://localhost:4000](http://localhost:4000). You'll be guided through onboarding.
 
-## Project Structure
+## Tech Stack
 
-```
-src/
-  app/
-    dashboard/        Main productivity dashboard
-    questions/        Full questions list with filters
-    categories/        Manage subjects
-    people/            Manage people
-    analytics/          Charts and trends
-    api/
-      people/
-      categories/
-      tasks/
-      progress/
-      dashboard/
-      analytics/
-  components/
-    dashboard/
-    questions/
-    categories/
-    people/
-    common/
-  lib/
-    mongodb.ts         Cached Mongoose connection
-    utils.ts           Shared formatting/status helpers
-    api.ts             Client-side fetch helpers
-  models/
-    Person.ts
-    Category.ts
-    Task.ts
-    Progress.ts
-  types/
-scripts/
-  seed.ts
-```
-
-## API Reference
-
-| Resource | Endpoints |
-|---|---|
-| People | `GET/POST /api/people`, `PATCH/DELETE /api/people/:id` |
-| Categories | `GET/POST /api/categories`, `PATCH/DELETE /api/categories/:id` |
-| Tasks | `GET/POST /api/tasks`, `GET/PATCH/DELETE /api/tasks/:id` |
-| Progress | `GET/POST /api/progress`, `PATCH/DELETE /api/progress/:id` |
-| Dashboard | `GET /api/dashboard?start=&end=` |
-| Analytics | `GET /api/analytics` |
-
-`POST /api/tasks` accepts either a single question (`content`/`link`) or a bulk `questions: []`
-array for the same date + subject, plus an `assignTo: personId[]` array to create progress rows
-for each assigned person.
-
-## Status Values
-
-`NOT_STARTED` (red) → `IN_PROGRESS` (yellow) → `DONE` (green) → `REVISED` (pink)
-
-## Notes
-
-- No category or person count is hardcoded anywhere in the code — the seed data is just a
-  starting point.
-- All data is persisted in MongoDB via Mongoose; there is no mock/static data path.
+Next.js 16 · MongoDB/Mongoose · Tailwind CSS · Recharts · react-hot-toast

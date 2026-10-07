@@ -1,200 +1,56 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-} from "recharts";
+import { useEffect, useState, useCallback } from "react";
+import dynamic from "next/dynamic";
+import { useUser } from "@/components/providers/UserProvider";
 import { apiGet } from "@/lib/api";
-import { LoadingState, ErrorState, EmptyState } from "@/components/common/StateViews";
-import { CardHeader } from "@/components/common/Card";
+import { LoadingState, ErrorState } from "@/components/ui/StateViews";
+import type { AnalyticsData } from "@/types";
 
-interface AnalyticsData {
-  categories: { categoryId: string; name: string }[];
-  people: { personId: string; name: string }[];
-  addedOverTime: { date: string; count: number }[];
-  completedOverTime: { date: string; count: number }[];
-  progressByPerson: {
-    personId: string;
-    name: string;
-    NOT_STARTED: number;
-    IN_PROGRESS: number;
-    DONE: number;
-    REVISED: number;
-  }[];
-  progressBySubject: {
-    categoryId: string;
-    name: string;
-    NOT_STARTED: number;
-    IN_PROGRESS: number;
-    DONE: number;
-    REVISED: number;
-  }[];
-  completedVsPending: {
-    NOT_STARTED: number;
-    IN_PROGRESS: number;
-    DONE: number;
-    REVISED: number;
-  };
-}
-
-const PIE_COLORS = ["#EB5953", "#F3BF39", "#46AF6A", "#CB41A2"];
-const STATUS_LABELS = ["Not Started", "In Progress", "Done", "Revised"];
+const AnalyticsCharts = dynamic(
+  () => import("@/components/analytics/AnalyticsCharts"),
+  {
+    ssr: false,
+    loading: () => <div className="h-64 animate-pulse rounded-xl bg-[var(--surface-muted)]" />,
+  }
+);
 
 export default function AnalyticsPage() {
+  const { user } = useUser();
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState("");
 
-  async function load() {
+  const load = useCallback(async () => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    setError(null);
     try {
-      const result = await apiGet<AnalyticsData>("/api/analytics");
-      setData(result);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load analytics");
+      const d = await apiGet<AnalyticsData>("/api/analytics");
+      setData(d);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load analytics");
     } finally {
       setLoading(false);
     }
-  }
+  }, [user]);
 
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(() => { load(); }, [load]);
 
-  if (loading) return <LoadingState label="Loading analytics..." />;
+  if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={load} />;
   if (!data) return null;
-
-  const hasAnyData =
-    data.addedOverTime.length > 0 ||
-    data.completedOverTime.length > 0 ||
-    data.progressByPerson.length > 0;
-
-  if (!hasAnyData) {
-    return (
-      <EmptyState
-        icon="📈"
-        title="No analytics yet"
-        description="Add some questions to see analytics here."
-      />
-    );
-  }
-
-  const pieData = STATUS_LABELS.map((label, i) => ({
-    name: label,
-    value: Object.values(data.completedVsPending)[i],
-  }));
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Analytics</h1>
-        <p className="text-sm text-slate-500">
-          Charts adapt automatically to any subject or person you add.
-        </p>
+        <h1 className="text-2xl font-bold text-[var(--foreground)]">Analytics</h1>
+        <p className="mt-1 text-sm text-[var(--muted)]">Preparation statistics and performance trends.</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <ChartCard title="Questions Added Over Time" icon="📈">
-          <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={data.addedOverTime}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-              <Tooltip />
-              <Line type="monotone" dataKey="count" stroke="#25A6EE" strokeWidth={2} />
-            </LineChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        <ChartCard title="Questions Completed Over Time" icon="✅">
-          <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={data.completedOverTime}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-              <Tooltip />
-              <Line type="monotone" dataKey="count" stroke="#46AF6A" strokeWidth={2} />
-            </LineChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        <ChartCard title="Progress by Person" icon="🧑‍💻">
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={data.progressByPerson}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="DONE" stackId="a" fill="#46AF6A" name="Done" />
-              <Bar dataKey="IN_PROGRESS" stackId="a" fill="#F3BF39" name="In Progress" />
-              <Bar dataKey="REVISED" stackId="a" fill="#CB41A2" name="Revised" />
-              <Bar dataKey="NOT_STARTED" stackId="a" fill="#EB5953" name="Not Started" />
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        <ChartCard title="Progress by Subject" icon="📚">
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={data.progressBySubject}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="DONE" stackId="a" fill="#46AF6A" name="Done" />
-              <Bar dataKey="IN_PROGRESS" stackId="a" fill="#F3BF39" name="In Progress" />
-              <Bar dataKey="REVISED" stackId="a" fill="#CB41A2" name="Revised" />
-              <Bar dataKey="NOT_STARTED" stackId="a" fill="#EB5953" name="Not Started" />
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        <ChartCard title="Completed vs Pending (Overall)" icon="🥧">
-          <ResponsiveContainer width="100%" height={280}>
-            <PieChart>
-              <Pie data={pieData} dataKey="value" nameKey="name" outerRadius={90} label>
-                {pieData.map((_, i) => (
-                  <Cell key={i} fill={PIE_COLORS[i]} />
-                ))}
-              </Pie>
-              <Tooltip />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
-        </ChartCard>
-      </div>
-    </div>
-  );
-}
-
-function ChartCard({
-  title,
-  icon,
-  children,
-}: {
-  title: string;
-  icon?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-2xl border border-slate-200/70 bg-white p-5 shadow-soft">
-      <CardHeader title={title} icon={icon} />
-      {children}
+      <AnalyticsCharts data={data} />
     </div>
   );
 }

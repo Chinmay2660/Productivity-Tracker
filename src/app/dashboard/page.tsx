@@ -1,212 +1,220 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { apiGet } from "@/lib/api";
-import { Category } from "@/types/category";
-import { Person } from "@/types/person";
-import { TaskWithDetails } from "@/types/task";
-import { resolveFilterRange } from "@/lib/utils";
-import { LoadingState, ErrorState, EmptyState } from "@/components/common/StateViews";
-import FilterBar, { DEFAULT_FILTERS, FiltersState } from "@/components/questions/FilterBar";
-import QuestionsTable from "@/components/questions/QuestionsTable";
-import QuestionFormModal from "@/components/questions/QuestionFormModal";
-import QuestionDetailsModal from "@/components/questions/QuestionDetailsModal";
-import QuestionEditModal from "@/components/questions/QuestionEditModal";
-import TotalProgressCard from "@/components/dashboard/TotalProgressCard";
-import TodayProgressCard from "@/components/dashboard/TodayProgressCard";
-import SubjectStatsCard from "@/components/dashboard/SubjectStatsCard";
-import IndividualProgressCard from "@/components/dashboard/IndividualProgressCard";
-import StatTile from "@/components/dashboard/StatTile";
-import Button from "@/components/common/Button";
-
-interface DashboardData {
-  people: Person[];
-  categories: Category[];
-  totalsByCategory: { categoryId: string; name: string; total: number }[];
-  todayProgressByPerson: {
-    personId: string;
-    name: string;
-    total: number;
-    completed: number;
-    percent: number;
-  }[];
-  statsBySubject: {
-    categoryId: string;
-    name: string;
-    totalQuestions: number;
-    NOT_STARTED: number;
-    IN_PROGRESS: number;
-    DONE: number;
-    REVISED: number;
-  }[];
-  overallByPerson: {
-    personId: string;
-    name: string;
-    NOT_STARTED: number;
-    IN_PROGRESS: number;
-    DONE: number;
-    REVISED: number;
-  }[];
-  tasks: TaskWithDetails[];
-}
+import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
+import { useUser } from "@/components/providers/UserProvider";
+import { apiGet, apiPatch, getErrorMessage } from "@/lib/api";
+import { normalizeQuestionStatus } from "@/lib/utils";
+import toast from "react-hot-toast";
+import {
+  triggerQuestionPointsBurst,
+  type QuestionPointBurst,
+} from "@/lib/question-points-burst";
+import { ReadinessCard } from "@/components/dashboard/CountdownBanner";
+import InspirationCard from "@/components/dashboard/InspirationCard";
+import TodayPlanCard from "@/components/dashboard/TodayPlanCard";
+import FocusTimer from "@/components/focus/FocusTimer";
+import Card, { CardHeader } from "@/components/ui/Card";
+import Button from "@/components/ui/Button";
+import ProgressBar from "@/components/ui/ProgressBar";
+import { ConfidenceBadge } from "@/components/ui/Badge";
+import PageHeader from "@/components/ui/PageHeader";
+import { DashboardSkeleton, ErrorState } from "@/components/ui/StateViews";
+import type { DashboardData, QuestionStatus } from "@/types";
 
 export default function DashboardPage() {
+  const { user } = useUser();
   const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState<FiltersState>(DEFAULT_FILTERS);
-  const [addOpen, setAddOpen] = useState(false);
-  const [selectedTask, setSelectedTask] = useState<TaskWithDetails | null>(null);
-  const [editingTask, setEditingTask] = useState<TaskWithDetails | null>(null);
+  const [initialLoad, setInitialLoad] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
+  const [pointBurst, setPointBurst] = useState<QuestionPointBurst | null>(null);
 
-  async function load() {
-    setLoading(true);
-    setError(null);
+  const load = useCallback(async (silent = false) => {
+    if (!user) return;
+    if (silent) setRefreshing(true);
+    else setInitialLoad(true);
     try {
-      const { start, end } = resolveFilterRange(filters);
-      const params = new URLSearchParams();
-      if (start) params.set("start", start);
-      if (end) params.set("end", end);
-      const result = await apiGet<DashboardData>(`/api/dashboard?${params.toString()}`);
-      setData(result);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load dashboard");
+      const d = await apiGet<DashboardData>("/api/dashboard");
+      setData(d);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load dashboard");
     } finally {
-      setLoading(false);
+      setInitialLoad(false);
+      setRefreshing(false);
     }
-  }
+  }, [user]);
 
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.quickFilter, filters.customStart, filters.customEnd]);
+  useEffect(() => { load(); }, [load]);
 
-  const filteredTasks = useMemo(() => {
-    if (!data) return [];
-    let tasks = data.tasks;
-    if (filters.categoryId) tasks = tasks.filter((t) => t.categoryId === filters.categoryId);
-    if (filters.personId)
-      tasks = tasks.filter((t) => t.progress.some((p) => p.personId === filters.personId));
-    if (filters.status)
-      tasks = tasks.filter((t) => t.progress.some((p) => p.status === filters.status));
-    if (filters.search) {
-      const q = filters.search.toLowerCase();
-      tasks = tasks.filter(
-        (t) => t.content?.toLowerCase().includes(q) || t.link?.toLowerCase().includes(q)
+  const updateQuestionStatus = async (id: string, status: QuestionStatus) => {
+    const normalized = normalizeQuestionStatus(status);
+    let previousStatus: QuestionStatus | undefined;
+    setData((prev) => {
+      if (!prev) return prev;
+      const current =
+        prev.todayQuestions.group.find((q) => q._id === id) ??
+        prev.todayQuestions.personal.find((q) => q._id === id);
+      if (!current) return prev;
+      previousStatus = current.status;
+      const updateList = (list: typeof prev.todayQuestions.group) =>
+        list.map((q) => (q._id === id ? { ...q, status: normalized } : q));
+      return {
+        ...prev,
+        todayQuestions: {
+          group: updateList(prev.todayQuestions.group),
+          personal: updateList(prev.todayQuestions.personal),
+        },
+      };
+    });
+    if (!previousStatus) return;
+
+    try {
+      const updated = await apiPatch<{ pointsEarnedNow?: number }>(
+        `/api/practice-questions/${id}`,
+        { status: normalized }
       );
+      triggerQuestionPointsBurst(setPointBurst, id, updated.pointsEarnedNow);
+      if (normalized === "add_to_todo") {
+        toast.success("Added to Tasks");
+      }
+    } catch (err) {
+      setData((prev) => {
+        if (!prev) return prev;
+        const updateList = (list: typeof prev.todayQuestions.group) =>
+          list.map((q) => (q._id === id ? { ...q, status: previousStatus! } : q));
+        return {
+          ...prev,
+          todayQuestions: {
+            group: updateList(prev.todayQuestions.group),
+            personal: updateList(prev.todayQuestions.personal),
+          },
+        };
+      });
+      toast.error(getErrorMessage(err, "Failed to update question"));
     }
-    return tasks;
-  }, [data, filters]);
+  };
 
-  const activePeople = useMemo(() => (data ? data.people : []), [data]);
-  const activeCategories = useMemo(() => (data ? data.categories : []), [data]);
-
-  async function refreshSelectedTask() {
-    if (!selectedTask) return;
-    const fresh = await apiGet<TaskWithDetails>(`/api/tasks/${selectedTask._id}`);
-    setSelectedTask(fresh);
-    load();
-  }
-
-  if (loading && !data) return <LoadingState label="Loading dashboard..." />;
-  if (error && !data) return <ErrorState message={error} onRetry={load} />;
+  if (initialLoad && !data) return <DashboardSkeleton />;
+  if (error && !data) return <ErrorState message={error} onRetry={() => load()} />;
   if (!data) return null;
 
-  const totalQuestions = data.totalsByCategory.reduce((sum, t) => sum + t.total, 0);
-  const avgToday = data.todayProgressByPerson.length
-    ? Math.round(
-        data.todayProgressByPerson.reduce((sum, p) => sum + p.percent, 0) /
-          data.todayProgressByPerson.length
-      )
-    : 0;
-
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            Technical Productivity Tracker
-          </h1>
-          <p className="text-sm text-slate-500">
-            Track progress across every subject and every person, dynamically.
-          </p>
-        </div>
-        <Button onClick={() => setAddOpen(true)}>
-          <span className="text-base leading-none">+</span> Add Question
-        </Button>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatTile icon="📋" label="Total Questions" value={totalQuestions} accent="#25A6EE" />
-        <StatTile icon="👥" label="Active People" value={activePeople.length} accent="#A361CF" />
-        <StatTile icon="📚" label="Subjects" value={activeCategories.length} accent="#13C8A5" />
-        <StatTile icon="⚡" label="Today's Avg" value={`${avgToday}%`} accent="#F59D02" />
-      </div>
-
-      <FilterBar
-        filters={filters}
-        onChange={setFilters}
-        categories={activeCategories}
-        people={activePeople}
+    <div className={refreshing ? "space-y-6 opacity-80 transition-opacity" : "space-y-6"}>
+      <PageHeader
+        title={`Welcome back, ${user?.name?.split(" ")[0]}`}
+        description="Here's where you stand today."
       />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <TotalProgressCard totals={data.totalsByCategory} />
-        <TodayProgressCard rows={data.todayProgressByPerson} />
-      </div>
-
-      <SubjectStatsCard stats={data.statsBySubject} />
-
-      <IndividualProgressCard
-        people={activePeople}
-        categories={activeCategories}
-        rangeTasks={data.tasks}
-        overallByPerson={data.overallByPerson}
-      />
-
-      <div>
-        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
-          <span className="text-base leading-none">🗂️</span> Questions
-        </h2>
-        {filteredTasks.length === 0 ? (
-          <EmptyState
-            title="No questions in this range"
-            description="Try a different filter or add a new question."
-          />
+      <Card>
+        <CardHeader
+          title="Group Progress"
+          action={
+            <Link href={user?.activeGroupId ? `/groups/${user.activeGroupId}` : "/groups"}>
+              <Button variant="ghost" size="sm">View Group</Button>
+            </Link>
+          }
+        />
+        {data.memberStats && data.memberStats.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="table-head">
+                  <th className="pb-2 font-medium">Member</th>
+                  <th className="pb-2 font-medium">Readiness</th>
+                  <th className="pb-2 font-medium">Tasks</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.memberStats.map((m) => (
+                  <tr key={m.userId} className="table-row">
+                    <td className="py-2 font-medium">
+                      <Link href={`/users/${m.userId}`} className="text-brand hover:underline">
+                        {m.name}
+                      </Link>
+                    </td>
+                    <td className="py-2">{m.readiness}%</td>
+                    <td className="py-2">{m.tasksCompleted}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
-          <QuestionsTable
-            tasks={filteredTasks}
-            people={activePeople}
-            onRowClick={setSelectedTask}
-          />
+          <p className="text-sm text-[var(--muted)]">No group members yet.</p>
         )}
+      </Card>
+
+      <TodayPlanCard
+        todayQuestions={data.todayQuestions}
+        onStatusChange={updateQuestionStatus}
+        pointBurst={pointBurst}
+      />
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div id="focus-timer">
+          <FocusTimer
+            groupId={user!.activeGroupId}
+            label="Start a focus session"
+            onComplete={() => load(true)}
+          />
+        </div>
+
+        <Card>
+          <CardHeader
+            title="Focus Areas"
+            action={<Link href="/subjects"><Button variant="ghost" size="sm">View All</Button></Link>}
+          />
+          {data.weakSubjects.length === 0 ? (
+            <p className="text-sm text-[var(--muted)]">No weak subjects detected. Keep it up!</p>
+          ) : (
+            <div className="space-y-3">
+              {data.weakSubjects.map((s) => (
+                <div key={s._id} className="rounded-xl border border-[var(--border)] p-3 ">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-[var(--foreground)]">{s.name}</span>
+                    <ConfidenceBadge confidence={s.confidence} />
+                  </div>
+                  <ProgressBar value={s.completionPercent} className="mt-2" />
+                  <p className="mt-1 text-xs text-[var(--muted)]">
+                    {s.questionCount}{s.totalQuestions > 0 ? ` / ${s.totalQuestions}` : ""} questions · {s.completionPercent}% prepared
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
       </div>
 
-      <QuestionFormModal
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        onSaved={load}
-        categories={activeCategories}
-        people={activePeople}
+      <InspirationCard
+        readiness={data.readiness}
+        studyStreak={data.studyStreak}
+        daysToInterview={data.countdown.days}
+        targetCtcLpa={user?.targetCtcLpa}
       />
 
-      <QuestionDetailsModal
-        task={selectedTask}
-        onClose={() => setSelectedTask(null)}
-        onChanged={refreshSelectedTask}
-        onEdit={(task) => {
-          setSelectedTask(null);
-          setEditingTask(task);
-        }}
-      />
+      <div className="grid gap-6 lg:grid-cols-2">
+        <ReadinessCard readiness={data.readiness} />
+        <Card>
+          <CardHeader title="Quick Stats" />
+          <div className="grid grid-cols-2 gap-4">
+            <Stat label="Questions Today" value={String(data.questionsToday)} />
+            <Stat label="Study Streak" value={`${data.studyStreak} days`} />
+            <Stat label="Group Readiness" value={`${data.groupReadiness ?? 0}%`} />
+          </div>
+        </Card>
+      </div>
 
-      <QuestionEditModal
-        task={editingTask}
-        onClose={() => setEditingTask(null)}
-        onSaved={load}
-        categories={activeCategories}
-        people={activePeople}
-      />
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="surface-muted p-3">
+      <p className="text-xs text-[var(--muted)]">{label}</p>
+      <p className="mt-0.5 text-lg font-bold text-[var(--foreground)]">{value}</p>
     </div>
   );
 }
