@@ -4,8 +4,7 @@ import { InputHTMLAttributes, TextareaHTMLAttributes, forwardRef } from "react";
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
   function Input({ className, suppressHydrationWarning, ...props }, ref) {
     // ponytail: browsers/password managers rewrite autocomplete before hydration
-    const suppress =
-      suppressHydrationWarning ?? (props.autoComplete != null && props.autoComplete !== false);
+    const suppress = suppressHydrationWarning ?? props.autoComplete != null;
     return (
       <input
         ref={ref}

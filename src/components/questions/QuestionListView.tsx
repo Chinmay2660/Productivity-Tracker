@@ -28,6 +28,11 @@ export type QuestionListItem = {
   scope?: ContentScope;
 };
 
+function questionDateLabel(q: QuestionListItem): string {
+  const date = q.practiceDate ?? q.createdAt;
+  return date ? formatDate(date) : "—";
+}
+
 function SortableHeader({
   label,
   field,
@@ -124,7 +129,7 @@ export default function QuestionListView({
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--muted)]">
               {showScope && q.scope && <QuestionScopeChip scope={q.scope} />}
-              <span>{formatDate(q.practiceDate ?? q.createdAt)}</span>
+              <span>{questionDateLabel(q)}</span>
               <span className="rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5">
                 {q.trackLabel || q.subjectName}
               </span>
@@ -229,7 +234,7 @@ export default function QuestionListView({
                   </div>
                 </td>
                 <td className="qs-row-cell truncate px-4 py-3.5 text-[var(--muted)]">
-                  {formatDate(q.practiceDate ?? q.createdAt)}
+                  {questionDateLabel(q)}
                 </td>
                 <td className="qs-row-cell truncate px-4 py-3.5">
                   <span className="rounded-md bg-[var(--surface-muted)] px-2 py-0.5 text-xs text-[var(--muted)]">
