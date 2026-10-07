@@ -37,7 +37,7 @@ export default function Sidebar() {
           if (isExternalNavItem(item)) {
             return (
               <button
-                key={item.href}
+                key={item.id}
                 type="button"
                 onClick={() => openCareerFlow()}
                 className={navItemClass(false)}
@@ -50,7 +50,7 @@ export default function Sidebar() {
           }
 
           return (
-            <Link key={item.href} href={item.href} className={navItemClass(active)}>
+            <Link key={item.id} href={item.href} className={navItemClass(active)}>
               <Icon
                 className="h-[18px] w-[18px] shrink-0"
                 strokeWidth={active ? 2.25 : 1.75}

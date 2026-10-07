@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useUser } from "@/components/providers/UserProvider";
-import { apiGet, apiPatch, apiPost, getErrorMessage } from "@/lib/api";
+import { apiGet, apiPatch, apiPost, apiDelete, getErrorMessage } from "@/lib/api";
 import Card, { CardHeader } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
@@ -45,8 +45,9 @@ type GroupDetail = Group & {
 
 export default function GroupDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const groupId = params.id as string;
-  const { user } = useUser();
+  const { user, refreshUser } = useUser();
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -62,6 +63,12 @@ export default function GroupDetailPage() {
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [savingGroup, setSavingGroup] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletingGroup, setDeletingGroup] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferTargetId, setTransferTargetId] = useState("");
+  const [transferring, setTransferring] = useState(false);
+  const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -184,6 +191,62 @@ export default function GroupDetailPage() {
     }
   };
 
+  const deleteGroup = async () => {
+    setDeletingGroup(true);
+    try {
+      await apiDelete(`/api/groups/${groupId}`);
+      await refreshUser();
+      toast.success("Group deleted");
+      router.push("/groups");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to delete group"));
+    } finally {
+      setDeletingGroup(false);
+      setShowDeleteModal(false);
+    }
+  };
+
+  const removeMember = async (memberId: string) => {
+    setRemovingMemberId(memberId);
+    try {
+      await apiDelete(`/api/groups/${groupId}/members/${memberId}`);
+      if (memberId === user?._id) {
+        await refreshUser();
+        toast.success("You left the group");
+        router.push("/groups");
+        return;
+      }
+      toast.success("Member removed");
+      load();
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to remove member"));
+    } finally {
+      setRemovingMemberId(null);
+    }
+  };
+
+  const transferOwnership = async () => {
+    if (!transferTargetId) return;
+    setTransferring(true);
+    try {
+      await apiPost(`/api/groups/${groupId}/transfer-ownership`, {
+        newOwnerId: transferTargetId,
+      });
+      toast.success("Ownership transferred");
+      setShowTransferModal(false);
+      setTransferTargetId("");
+      load();
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to transfer ownership"));
+    } finally {
+      setTransferring(false);
+    }
+  };
+
+  const otherMembers = group?.memberStats.filter(
+    (m) => m.userId !== user?._id && m.role !== "owner"
+  ) ?? [];
+
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={load} />;
   if (!group) return <ErrorState message="Group not found" onRetry={load} />;
@@ -191,10 +254,20 @@ export default function GroupDetailPage() {
   return (
     <div className="space-y-6">
       {canEditGroup && (
-        <div className="flex justify-end">
+        <div className="flex flex-wrap justify-end gap-2">
           <Button variant="outline" size="sm" onClick={openEditModal}>
             Edit Group
           </Button>
+          {isOwner && otherMembers.length > 0 && (
+            <Button variant="outline" size="sm" onClick={() => setShowTransferModal(true)}>
+              Transfer Ownership
+            </Button>
+          )}
+          {isOwner && (
+            <Button variant="danger" size="sm" onClick={() => setShowDeleteModal(true)}>
+              Delete Group
+            </Button>
+          )}
         </div>
       )}
 
@@ -212,22 +285,44 @@ export default function GroupDetailPage() {
                 <th className="pb-2">Role</th>
                 <th className="pb-2">Points</th>
                 <th className="pb-2">Tasks</th>
+                <th className="pb-2" />
               </tr>
             </thead>
             <tbody>
               {group.memberStats.map((m) => {
                 const points =
                   group.gamification?.leaderboard.find((g) => g.userId === m.userId)?.totalPoints ?? 0;
+                const isMe = m.userId === user?._id;
+                const canRemove =
+                  m.role !== "owner" &&
+                  (isMe || isOwner);
                 return (
                   <tr key={m.userId} className="table-row">
                     <td className="py-2.5 font-medium">
                       <Link href={`/users/${m.userId}`} className="text-brand hover:underline">
                         {m.name}
+                        {isMe ? " (you)" : ""}
                       </Link>
                     </td>
                     <td className="py-2.5 capitalize text-[var(--muted)]">{m.role}</td>
                     <td className="py-2.5 font-semibold text-brand">{points}</td>
                     <td className="py-2.5">{m.tasksCompleted}</td>
+                    <td className="py-2.5 text-right">
+                      {canRemove && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={removingMemberId === m.userId}
+                          onClick={() => removeMember(m.userId)}
+                        >
+                          {removingMemberId === m.userId
+                            ? "…"
+                            : isMe
+                              ? "Leave"
+                              : "Remove"}
+                        </Button>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
@@ -291,6 +386,57 @@ export default function GroupDetailPage() {
           </p>
         )}
       </Card>
+
+      <Modal open={showDeleteModal} onClose={() => setShowDeleteModal(false)} title="Delete Group">
+        <div className="space-y-4">
+          <p className="text-sm text-[var(--muted)]">
+            This permanently deletes <strong>{group.name}</strong> and all its questions, subjects,
+            and progress data. This cannot be undone.
+          </p>
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1" onClick={() => setShowDeleteModal(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              className="flex-1"
+              disabled={deletingGroup}
+              onClick={deleteGroup}
+            >
+              {deletingGroup ? "Deleting…" : "Delete Group"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={showTransferModal}
+        onClose={() => setShowTransferModal(false)}
+        title="Transfer Ownership"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-[var(--muted)]">
+            Choose a member to become the new owner. You will become a regular member.
+          </p>
+          <select
+            value={transferTargetId}
+            onChange={(e) => setTransferTargetId(e.target.value)}
+            className="w-full rounded-lg border border-[var(--input-border)] px-4 py-2 text-sm dark:bg-[var(--input-bg)]"
+          >
+            <option value="">Select member…</option>
+            {otherMembers.map((m) => (
+              <option key={m.userId} value={m.userId}>{m.name}</option>
+            ))}
+          </select>
+          <Button
+            className="w-full"
+            disabled={!transferTargetId || transferring}
+            onClick={transferOwnership}
+          >
+            {transferring ? "Transferring…" : "Transfer Ownership"}
+          </Button>
+        </div>
+      </Modal>
 
       <Modal open={showEditModal} onClose={() => setShowEditModal(false)} title="Edit Group">
         <div className="space-y-4">

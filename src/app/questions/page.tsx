@@ -75,7 +75,12 @@ export default function QuestionsPage() {
   const modalSubjects = scope === "group" ? groupSubjects : personalSubjects;
 
   const load = useCallback(async () => {
-    if (!user?.activeGroupId) return;
+    if (!user) return;
+    if (!user.activeGroupId) {
+      setLoading(false);
+      setInitialLoad(false);
+      return;
+    }
     setLoading(true);
     try {
       const questionUrl = `/api/practice-questions?groupId=${user.activeGroupId}&scope=all&page=${page}&limit=${PAGE_SIZE}&period=${datePeriod}&sortBy=${sortBy}&sortDir=${sortDir}`;
@@ -245,6 +250,20 @@ export default function QuestionsPage() {
       toast.error(getErrorMessage(err, "Failed to delete question"));
     }
   };
+
+  if (user && !user.activeGroupId) {
+    return (
+      <EmptyState
+        title="No active group"
+        description="Join or create a group to start tracking practice questions."
+        action={
+          <Link href="/groups">
+            <Button>Browse Groups</Button>
+          </Link>
+        }
+      />
+    );
+  }
 
   if (initialLoad && loading) {
     return (

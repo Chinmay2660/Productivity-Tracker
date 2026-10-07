@@ -14,6 +14,7 @@ import {
 export const EXTERNAL_CAREERFLOW_HREF = "__external:careerflow";
 
 export type NavItem = {
+  id: string;
   href: string;
   label: string;
   shortLabel?: string;
@@ -45,29 +46,46 @@ export function getMockInterviewsNavHref(activeGroupId?: string): string {
 }
 
 export function buildMainNav(activeGroupId?: string): NavItem[] {
-  return [
-    { href: "/dashboard", label: "Dashboard", shortLabel: "Dashboard", icon: LayoutDashboard },
-    { href: getGroupNavHref(activeGroupId), label: "Group", shortLabel: "Group", icon: Users },
+  const nav: NavItem[] = [
+    { id: "dashboard", href: "/dashboard", label: "Dashboard", shortLabel: "Dashboard", icon: LayoutDashboard },
+  ];
+
+  if (activeGroupId) {
+    nav.push(
+      { id: "group", href: `/groups/${activeGroupId}`, label: "Group", shortLabel: "Group", icon: Users },
+      {
+        id: "mock-interviews",
+        href: `/groups/${activeGroupId}/mock-interviews`,
+        label: "Mock Interviews",
+        shortLabel: "Mocks",
+        icon: Mic,
+      }
+    );
+  }
+
+  nav.push(
+    { id: "questions", href: "/questions", label: "Questions", icon: CircleHelp },
+    { id: "subjects", href: "/subjects", label: "Tracks", icon: BookOpen },
+    { id: "tasks", href: "/tasks", label: "Tasks", icon: ListChecks },
     {
-      href: getMockInterviewsNavHref(activeGroupId),
-      label: "Mock Interviews",
-      shortLabel: "Mocks",
-      icon: Mic,
+      id: "groups",
+      href: "/groups",
+      label: activeGroupId ? "All Groups" : "Groups",
+      icon: Users,
     },
-    { href: "/questions", label: "Questions", icon: CircleHelp },
-    { href: "/subjects", label: "Tracks", icon: BookOpen },
-    { href: "/tasks", label: "Tasks", icon: ListChecks },
-    { href: "/groups", label: "All Groups", icon: Users },
-    { href: "/analytics", label: "Analytics", icon: TrendingUp },
+    { id: "analytics", href: "/analytics", label: "Analytics", icon: TrendingUp },
     {
+      id: "careerflow",
       href: EXTERNAL_CAREERFLOW_HREF,
       label: "CareerFlow",
       shortLabel: "Jobs",
       icon: Briefcase,
       external: true,
     },
-    { href: "/settings", label: "Settings", shortLabel: "More", icon: Settings },
-  ];
+    { id: "settings", href: "/settings", label: "Settings", shortLabel: "More", icon: Settings }
+  );
+
+  return nav;
 }
 
 export const MAIN_NAV: NavItem[] = buildMainNav();

@@ -8,6 +8,11 @@ import QuestionProgress from "@/models/QuestionProgress";
 import PracticeQuestion from "@/models/PracticeQuestion";
 import PrepTask from "@/models/PrepTask";
 import MockInterview from "@/models/MockInterview";
+import MockInterviewSession from "@/models/MockInterviewSession";
+import MockInterviewSlot from "@/models/MockInterviewSlot";
+import MockInterviewRound from "@/models/MockInterviewRound";
+import StudySession from "@/models/StudySession";
+import PreparationPlan from "@/models/PreparationPlan";
 import type { Confidence, GroupRole, TopicStatus } from "@/types";
 import { calculateReadiness, getInterviewCountdown } from "./readiness";
 import {
@@ -311,6 +316,41 @@ export async function ensureFreshJoinCodeForOwner(
 
 export function canManageGroup(role: GroupRole | null): boolean {
   return role === "owner" || role === "admin";
+}
+
+/** ponytail: deletes group-scoped data; upgrade path is soft-delete + archive if retention needed */
+export async function deleteGroupData(groupId: string) {
+  const gid = new mongoose.Types.ObjectId(groupId);
+  const [questionIds, topicIds] = await Promise.all([
+    PracticeQuestion.find({ groupId: gid }).distinct("_id"),
+    Topic.find({ groupId: gid }).distinct("_id"),
+  ]);
+
+  await Promise.all([
+    PracticeQuestion.deleteMany({ groupId: gid }),
+    questionIds.length > 0
+      ? QuestionProgress.deleteMany({ questionId: { $in: questionIds } })
+      : Promise.resolve(),
+    Subject.deleteMany({ groupId: gid }),
+    Topic.deleteMany({ groupId: gid }),
+    topicIds.length > 0
+      ? TopicProgress.deleteMany({ topicId: { $in: topicIds } })
+      : Promise.resolve(),
+    PrepTask.deleteMany({ groupId: gid }),
+    MockInterview.deleteMany({ groupId: gid }),
+    MockInterviewSession.deleteMany({ groupId: gid }),
+    MockInterviewSlot.deleteMany({ groupId: gid }),
+    MockInterviewRound.deleteMany({ groupId: gid }),
+    StudySession.deleteMany({ groupId: gid }),
+    PreparationPlan.deleteMany({ groupId: gid }),
+  ]);
+}
+
+export async function clearActiveGroupForMembers(groupId: string) {
+  await User.updateMany(
+    { activeGroupId: new mongoose.Types.ObjectId(groupId) },
+    { $unset: { activeGroupId: 1 } }
+  );
 }
 
 export interface MemberStat {

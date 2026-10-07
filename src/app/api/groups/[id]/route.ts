@@ -7,6 +7,8 @@ import {
   canManageGroup,
   getMemberStatsBatch,
   getGroupGamificationStats,
+  deleteGroupData,
+  clearActiveGroupForMembers,
 } from "@/lib/services";
 import Group from "@/models/Group";
 import Subject from "@/models/Subject";
@@ -94,6 +96,8 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     if (!group) return jsonError("Group not found", 404);
     if (String(group.ownerId) !== userId) return jsonError("Only owner can delete group", 403);
 
+    await deleteGroupData(id);
+    await clearActiveGroupForMembers(id);
     await group.deleteOne();
     return jsonOk({ deleted: true });
   } catch (err) {

@@ -4,8 +4,9 @@ import { useEffect, useState, useCallback } from "react";
 import { useUser } from "@/components/providers/UserProvider";
 import { apiGet, apiPatch, apiPost, getErrorMessage } from "@/lib/api";
 import Card, { CardHeader } from "@/components/ui/Card";
+import Link from "next/link";
 import Button from "@/components/ui/Button";
-import { LoadingState, ErrorState } from "@/components/ui/StateViews";
+import { LoadingState, ErrorState, EmptyState } from "@/components/ui/StateViews";
 import { formatDate } from "@/lib/utils";
 import toast from "react-hot-toast";
 import type { PreparationPlan } from "@/types";
@@ -17,7 +18,11 @@ export default function InterviewPlanPage() {
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
-    if (!user?.activeGroupId) return;
+    if (!user) return;
+    if (!user.activeGroupId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const data = await apiGet<PreparationPlan>(
@@ -58,6 +63,20 @@ export default function InterviewPlanPage() {
       toast.error(getErrorMessage(err, "Failed to regenerate plan"));
     }
   };
+
+  if (user && !user.activeGroupId) {
+    return (
+      <EmptyState
+        title="No active group"
+        description="A preparation plan is tied to your group. Join or create one to get started."
+        action={
+          <Link href="/groups">
+            <Button>Browse Groups</Button>
+          </Link>
+        }
+      />
+    );
+  }
 
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={load} />;
