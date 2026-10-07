@@ -14,7 +14,7 @@ import {
   ErrorState,
   EmptyState,
 } from "@/components/ui/StateViews";
-import QuestionListView from "@/components/questions/QuestionListView";
+import QuestionListView, { type QuestionListItem } from "@/components/questions/QuestionListView";
 import {
   formatSubjectTrack,
   toDateInputValue,
@@ -134,13 +134,15 @@ export default function QuestionsPage() {
     setShowModal(true);
   };
 
-  const openEditModal = (q: QuestionWithSubject) => {
-    setEditingId(q._id);
-    setContent(q.content);
-    setLink(q.link ?? "");
-    setPracticeDate(toDateInputValue(q.practiceDate ?? q.createdAt));
-    setScope(q.scope);
-    setSubjectId(q.subjectId);
+  const openEditModal = (q: QuestionListItem) => {
+    const full = questions.find((item) => item._id === q._id);
+    if (!full) return;
+    setEditingId(full._id);
+    setContent(full.content);
+    setLink(full.link ?? "");
+    setPracticeDate(toDateInputValue(full.practiceDate ?? full.createdAt));
+    setScope(full.scope);
+    setSubjectId(full.subjectId);
     setShowModal(true);
   };
 

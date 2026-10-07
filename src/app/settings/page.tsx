@@ -10,6 +10,7 @@ import {
   Sun,
   Target,
   Timer,
+  type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -38,7 +39,7 @@ function SettingsGroup({
   description,
   children,
 }: {
-  icon: typeof UserRound;
+  icon: LucideIcon;
   title: string;
   description?: string;
   children: React.ReactNode;

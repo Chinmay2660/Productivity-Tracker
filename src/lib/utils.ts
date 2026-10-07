@@ -327,8 +327,8 @@ export function compareQuestions<
 >(a: T, b: T, sortBy: QuestionSortField, sortDir: QuestionSortDir): number {
   const dir = sortDir === "asc" ? 1 : -1;
   if (sortBy === "date") {
-    const da = new Date(a.practiceDate ?? a.createdAt).getTime();
-    const db = new Date(b.practiceDate ?? b.createdAt).getTime();
+    const da = new Date(a.practiceDate ?? a.createdAt ?? 0).getTime();
+    const db = new Date(b.practiceDate ?? b.createdAt ?? 0).getTime();
     return (da - db) * dir;
   }
   if (sortBy === "status") {

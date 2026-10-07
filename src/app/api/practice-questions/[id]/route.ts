@@ -52,7 +52,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             prevStatus,
             nextStatus,
             question.practiceDate ?? question.createdAt,
-            existing
+            existing ?? undefined
           );
           if (award.pointsAwarded != null) progressUpdates.pointsAwarded = award.pointsAwarded;
           if (award.firstCompletedAt) progressUpdates.firstCompletedAt = award.firstCompletedAt;

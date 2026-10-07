@@ -13,7 +13,7 @@ const jakarta = Plus_Jakarta_Sans({
   display: "swap",
 });
 
-const themeScript = `(function(){try{var t=localStorage.getItem("growthhub-theme")||localStorage.getItem("switch-theme");var d=window.matchMedia("(prefers-color-scheme: dark)").matches;if(t==="dark"||(t!=="light"&&d))document.documentElement.classList.add("dark")}catch(e){}})();`;
+const themeScript = `(function(){try{var t=localStorage.getItem("growthhub-theme")||localStorage.getItem("switch-theme");var d=window.matchMedia("(prefers-color-scheme: dark)").matches;var dark=t==="dark"||((!t||t==="system")&&d);document.documentElement.classList.toggle("dark",dark)}catch(e){}})();`;
 
 export const metadata: Metadata = {
   title: "GrowthHub",
