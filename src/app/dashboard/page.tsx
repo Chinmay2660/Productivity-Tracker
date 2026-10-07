@@ -19,11 +19,11 @@ import Button from "@/components/ui/Button";
 import ProgressBar from "@/components/ui/ProgressBar";
 import { ConfidenceBadge } from "@/components/ui/Badge";
 import PageHeader from "@/components/ui/PageHeader";
-import { DashboardSkeleton, ErrorState } from "@/components/ui/StateViews";
+import { DashboardSkeleton, ErrorState, EmptyState } from "@/components/ui/StateViews";
 import type { DashboardData, QuestionStatus } from "@/types";
 
 export default function DashboardPage() {
-  const { user } = useUser();
+  const { user, refreshUser } = useUser();
   const [data, setData] = useState<DashboardData | null>(null);
   const [initialLoad, setInitialLoad] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -32,6 +32,11 @@ export default function DashboardPage() {
 
   const load = useCallback(async (silent = false) => {
     if (!user) return;
+    if (!user.activeGroupId) {
+      setInitialLoad(false);
+      setRefreshing(false);
+      return;
+    }
     if (silent) setRefreshing(true);
     else setInitialLoad(true);
     try {
@@ -39,7 +44,14 @@ export default function DashboardPage() {
       setData(d);
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load dashboard");
+      const message = err instanceof Error ? err.message : "Failed to load dashboard";
+      if (message === "No active group") {
+        await refreshUser();
+        setData(null);
+        setError("");
+      } else {
+        setError(message);
+      }
     } finally {
       setInitialLoad(false);
       setRefreshing(false);
@@ -96,7 +108,26 @@ export default function DashboardPage() {
     }
   };
 
-  if (initialLoad && !data) return <DashboardSkeleton />;
+  if (initialLoad && !data && user?.activeGroupId) return <DashboardSkeleton />;
+  if (user && !user.activeGroupId) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title={`Welcome back, ${user.name?.split(" ")[0]}`}
+          description="Join or create a group to unlock your dashboard."
+        />
+        <EmptyState
+          title="No active group"
+          description="Create a prep group or join one with an invite code to track progress together."
+          action={
+            <Link href="/groups">
+              <Button>Browse Groups</Button>
+            </Link>
+          }
+        />
+      </div>
+    );
+  }
   if (error && !data) return <ErrorState message={error} onRetry={() => load()} />;
   if (!data) return null;
 
@@ -123,7 +154,7 @@ export default function DashboardPage() {
                 <tr className="table-head">
                   <th className="pb-2 font-medium">Member</th>
                   <th className="pb-2 font-medium">Readiness</th>
-                  <th className="pb-2 font-medium">Tasks</th>
+                  <th className="pb-2 font-medium">Tasks Done</th>
                 </tr>
               </thead>
               <tbody>

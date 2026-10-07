@@ -27,7 +27,7 @@ export default function MobileNav() {
           if (isExternalNavItem(item)) {
             return (
               <button
-                key={item.href}
+                key={item.id}
                 type="button"
                 onClick={() => openCareerFlow()}
                 className={className}
@@ -45,7 +45,7 @@ export default function MobileNav() {
           }
 
           return (
-            <Link key={item.href} href={item.href} className={className}>
+            <Link key={item.id} href={item.href} className={className}>
               <Icon className="h-5 w-5" strokeWidth={active ? 2.25 : 1.75} />
               {item.shortLabel ?? item.label}
             </Link>

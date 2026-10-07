@@ -26,15 +26,19 @@ export async function GET(request: Request) {
     const userId = requireAuthUserId(request);
     await connectToDatabase();
 
-    const user = await User.findById(userId).lean();
+    const user = await User.findById(userId);
     if (!user) return jsonError("User not found", 404);
     if (!user.activeGroupId) return jsonError("No active group", 400);
 
     const groupId = String(user.activeGroupId);
-    await ensureTopicProgress(userId, groupId);
-
     const group = await Group.findById(groupId).lean();
-    if (!group) return jsonError("Group not found", 404);
+    if (!group) {
+      user.activeGroupId = undefined;
+      await user.save();
+      return jsonError("No active group", 400);
+    }
+
+    await ensureTopicProgress(userId, groupId);
 
     const countdown = getInterviewCountdown(group.interviewDate);
 

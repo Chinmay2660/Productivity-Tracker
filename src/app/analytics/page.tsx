@@ -4,7 +4,9 @@ import { useEffect, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { useUser } from "@/components/providers/UserProvider";
 import { apiGet } from "@/lib/api";
-import { LoadingState, ErrorState } from "@/components/ui/StateViews";
+import Link from "next/link";
+import Button from "@/components/ui/Button";
+import { LoadingState, ErrorState, EmptyState } from "@/components/ui/StateViews";
 import type { AnalyticsData } from "@/types";
 
 const AnalyticsCharts = dynamic(
@@ -26,6 +28,10 @@ export default function AnalyticsPage() {
       setLoading(false);
       return;
     }
+    if (!user.activeGroupId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const d = await apiGet<AnalyticsData>("/api/analytics");
@@ -38,6 +44,20 @@ export default function AnalyticsPage() {
   }, [user]);
 
   useEffect(() => { load(); }, [load]);
+
+  if (user && !user.activeGroupId) {
+    return (
+      <EmptyState
+        title="No active group"
+        description="Analytics are available once you join or create a prep group."
+        action={
+          <Link href="/groups">
+            <Button>Browse Groups</Button>
+          </Link>
+        }
+      />
+    );
+  }
 
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={load} />;
