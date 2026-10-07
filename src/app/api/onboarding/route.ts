@@ -2,6 +2,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { requireAuthUserId, unauthorized } from "@/lib/api-auth";
 import { jsonOk, jsonError } from "@/lib/utils";
 import { serializeDoc, seedGroupSubjects } from "@/lib/services";
+import { normalizeUser } from "@/lib/user";
 import {
   generateJoinCode,
   joinCodeExpiryDate,
@@ -74,7 +75,7 @@ export async function POST(request: Request) {
     await user.save();
 
     return jsonOk({
-      user: serializeDoc(user),
+      user: normalizeUser(user),
       group: serializeDoc(group),
     }, 201);
   } catch (err) {

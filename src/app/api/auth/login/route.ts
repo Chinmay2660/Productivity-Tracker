@@ -2,7 +2,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { normalizeUsername, verifyAuthCode } from "@/lib/auth";
 import { buildSessionCookie } from "@/lib/session";
 import { jsonOk, jsonError } from "@/lib/utils";
-import { serializeDoc } from "@/lib/services";
+import { normalizeUser } from "@/lib/user";
 import { checkAuthRateLimit } from "@/lib/auth-rate-limit";
 import User from "@/models/User";
 
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
       return jsonError("Invalid username or code", 401);
     }
 
-    const response = jsonOk({ user: serializeDoc(user) });
+    const response = jsonOk({ user: normalizeUser(user) });
     response.headers.set("Set-Cookie", await buildSessionCookie(String(user._id)));
     return response;
   } catch (err) {

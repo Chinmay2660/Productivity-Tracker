@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
 import type { User } from "@/types";
 import { apiGet, apiPatch, apiPost } from "@/lib/api";
+import { normalizeUser } from "@/lib/user";
 
 interface UserContextValue {
   user: User | null;
@@ -29,7 +30,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const refreshUser = useCallback(async () => {
     try {
       const data = await apiGet<User>("/api/auth/me");
-      setUser(data);
+      setUser(normalizeUser(data));
     } catch {
       setUser(null);
     } finally {
@@ -44,7 +45,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const updateUser = useCallback(async (updates: Partial<User>) => {
     if (!user) throw new Error("Not signed in");
     const updated = await apiPatch<User>(`/api/users/${user._id}`, updates);
-    setUser(updated);
+    setUser(normalizeUser(updated));
   }, [user]);
 
   const logout = useCallback(async () => {

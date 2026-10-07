@@ -107,7 +107,9 @@ export function getReadinessBarColor(percent: number): string {
 }
 
 // ponytail: self-check — run with `npx tsx src/lib/readiness.ts`
-if (typeof require !== "undefined" && require.main === module) {
+const isDirectRun =
+  typeof process !== "undefined" && process.argv[1]?.includes("readiness");
+if (isDirectRun) {
   const zero = calculateReadiness({
     topics: [],
     tasksCompleted: 0,

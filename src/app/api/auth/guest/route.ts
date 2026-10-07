@@ -1,7 +1,7 @@
 import { connectToDatabase } from "@/lib/mongodb";
 import { buildSessionCookie } from "@/lib/session";
 import { jsonOk, jsonError } from "@/lib/utils";
-import { serializeDoc } from "@/lib/services";
+import { normalizeUser } from "@/lib/user";
 import { ensureDemoData } from "@/lib/demo-seed";
 
 function guestAuthAllowed(): boolean {
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     await connectToDatabase();
     const user = await ensureDemoData();
 
-    const response = jsonOk({ user: serializeDoc(user) });
+    const response = jsonOk({ user: normalizeUser(user) });
     response.headers.set("Set-Cookie", await buildSessionCookie(String(user._id)));
     return response;
   } catch (err) {

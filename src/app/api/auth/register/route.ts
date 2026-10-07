@@ -7,7 +7,7 @@ import {
 } from "@/lib/auth";
 import { buildSessionCookie } from "@/lib/session";
 import { jsonOk, jsonError } from "@/lib/utils";
-import { serializeDoc } from "@/lib/services";
+import { normalizeUser } from "@/lib/user";
 import { checkAuthRateLimit } from "@/lib/auth-rate-limit";
 import User from "@/models/User";
 
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     });
 
     const response = jsonOk(
-      { user: serializeDoc(user), authCode },
+      { user: normalizeUser(user), authCode },
       201
     );
     response.headers.set("Set-Cookie", await buildSessionCookie(String(user._id)));
