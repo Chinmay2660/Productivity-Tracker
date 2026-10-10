@@ -22,10 +22,12 @@ export default function TasksPage() {
   const [updatingIds, setUpdatingIds] = useState<Set<string>>(() => new Set());
   const [deletingIds, setDeletingIds] = useState<Set<string>>(() => new Set());
 
+  const activeGroupId = user?.activeGroupId;
+
   const fetchTasks = useCallback(async () => {
-    if (!user?.activeGroupId) return [];
-    return apiGet<TaskWithNames[]>(`/api/tasks?groupId=${user.activeGroupId}`);
-  }, [user?.activeGroupId]);
+    if (!activeGroupId) return [];
+    return apiGet<TaskWithNames[]>(`/api/tasks?groupId=${activeGroupId}`);
+  }, [activeGroupId]);
 
   useEffect(() => {
     let cancelled = false;

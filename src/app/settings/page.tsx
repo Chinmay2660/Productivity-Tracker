@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import {
+  Check,
   Copy,
   KeyRound,
   LogOut,
@@ -99,6 +100,18 @@ export default function SettingsPage() {
     [targetCtc]
   );
 
+  const savedCtc = profile?.targetCtcLpa ?? 0;
+  const currentCtc = targetCtc > 0 ? targetCtc : 0;
+
+  const isDirty = useMemo(() => {
+    if (!profile) return false;
+    return (
+      dailyMinutes !== profile.dailyStudyMinutes ||
+      theme !== profile.theme ||
+      currentCtc !== savedCtc
+    );
+  }, [profile, dailyMinutes, theme, currentCtc, savedCtc]);
+
   const displayCode = newCode ?? null;
   const initials = user?.name
     ?.split(" ")
@@ -143,7 +156,20 @@ export default function SettingsPage() {
     toast.success("Code copied");
   };
 
+  const revertSettings = () => {
+    if (!profile) return;
+    setDailyMinutes(profile.dailyStudyMinutes);
+    setTargetCtc(profile.targetCtcLpa ?? 0);
+    setTheme(profile.theme);
+  };
+
   const handleLogout = async () => {
+    if (
+      isDirty &&
+      !window.confirm("You have unsaved changes. Sign out without saving?")
+    ) {
+      return;
+    }
     await logout();
     router.push("/login");
   };
@@ -164,11 +190,6 @@ export default function SettingsPage() {
       <PageHeader
         title="Settings"
         description="Manage your account, goals, and how the app looks."
-        action={
-          <Button size="sm" onClick={saveSettings} disabled={saving}>
-            {saving ? "Saving…" : "Save changes"}
-          </Button>
-        }
       />
 
       <div className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5">
@@ -176,7 +197,7 @@ export default function SettingsPage() {
           className="pointer-events-none absolute inset-0 bg-gradient-to-br from-brand/8 via-transparent to-transparent"
           aria-hidden
         />
-        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-center gap-4">
             <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-brand text-lg font-bold text-white">
               {initials || "?"}
@@ -191,9 +212,20 @@ export default function SettingsPage() {
               )}
             </div>
           </div>
-          <Link href={`/users/${user._id}`}>
-            <Button variant="outline" size="sm">View profile</Button>
-          </Link>
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            <Link href={`/users/${user._id}`}>
+              <Button variant="outline" size="sm">View profile</Button>
+            </Link>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleLogout}
+              className="text-[var(--muted)] hover:text-[var(--danger)]"
+            >
+              <LogOut className="h-3.5 w-3.5" aria-hidden />
+              Sign out
+            </Button>
+          </div>
         </div>
 
         <div className="relative mt-4 grid grid-cols-3 gap-2">
@@ -333,6 +365,7 @@ export default function SettingsPage() {
               step={0.5}
               value={targetCtc || ""}
               onChange={(e) => setTargetCtc(Number(e.target.value))}
+              onWheel={(e) => e.currentTarget.blur()}
               placeholder="25"
               className="w-16 bg-transparent text-lg font-semibold outline-none"
             />
@@ -340,7 +373,7 @@ export default function SettingsPage() {
           </div>
           {targetCtc > 0 && (
             <p className="text-sm text-[var(--muted)]">
-              ≈ ₹{Math.round((targetCtc * 100000) / 12 / 1000)}K/mo before tax
+              ≈ ₹{Math.round((targetCtc * 100000) / 12 / 1000)}K/mo
             </p>
           )}
         </div>
@@ -351,17 +384,33 @@ export default function SettingsPage() {
         )}
       </SettingsGroup>
 
-      <div className="flex justify-end">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleLogout}
-          className="text-[var(--danger)] hover:border-[var(--danger)] hover:bg-[var(--chip-danger-bg)]"
+      {!isDirty ? (
+        <p className="flex items-center justify-center gap-1.5 text-xs text-[var(--muted)] sm:justify-start">
+          <Check className="h-3.5 w-3.5 text-emerald-600" aria-hidden />
+          Settings synced with your account
+        </p>
+      ) : (
+        <div
+          className="sticky bottom-4 z-20 flex flex-col gap-3 rounded-xl border border-brand/25 bg-[var(--card)]/95 p-3 shadow-panel backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between"
+          role="status"
+          aria-live="polite"
         >
-          <LogOut className="mr-1.5 h-3.5 w-3.5" />
-          Sign out
-        </Button>
-      </div>
+          <div className="min-w-0 text-sm">
+            <p className="font-medium text-[var(--foreground)]">Unsaved changes</p>
+            <p className="mt-0.5 text-xs text-[var(--muted)]">
+              Theme previews instantly — save to keep goals and appearance on your account.
+            </p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <Button variant="ghost" size="sm" onClick={revertSettings} disabled={saving}>
+              Revert
+            </Button>
+            <Button size="sm" onClick={saveSettings} disabled={saving} className="min-w-[6.5rem]">
+              {saving ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

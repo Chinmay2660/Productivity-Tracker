@@ -23,12 +23,10 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const activeGroupId = user?.activeGroupId;
+
   const load = useCallback(async () => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-    if (!user.activeGroupId) {
+    if (!activeGroupId) {
       setLoading(false);
       return;
     }
@@ -36,12 +34,13 @@ export default function AnalyticsPage() {
     try {
       const d = await apiGet<AnalyticsData>("/api/analytics");
       setData(d);
+      setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load analytics");
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [activeGroupId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -70,7 +69,7 @@ export default function AnalyticsPage() {
         <p className="mt-1 text-sm text-[var(--muted)]">Preparation statistics and performance trends.</p>
       </div>
 
-      <AnalyticsCharts data={data} />
+      <AnalyticsCharts data={data} currentUserId={user?._id} />
     </div>
   );
 }

@@ -142,7 +142,7 @@ export default function SubjectsPage() {
           <h1 className="text-2xl font-bold text-[var(--foreground)]">Tracks</h1>
           <p className="mt-1 text-sm text-[var(--muted)]">
             {tab === "group"
-              ? "Group prep tracks like DSA — 150 questions."
+              ? "Shared tracks for your group’s question bank."
               : "Your private tracks for solo practice."}
           </p>
         </div>
@@ -180,7 +180,7 @@ export default function SubjectsPage() {
           title={tab === "group" ? "No group tracks yet" : "No personal tracks yet"}
           description={
             tab === "group"
-              ? "Add tracks like DSA — 150 Questions for your group."
+              ? "Add a track for your group to organize questions."
               : "Add personal tracks for your question bank."
           }
           action={<Button onClick={openCreateModal}>Add Track</Button>}
@@ -232,16 +232,13 @@ export default function SubjectsPage() {
         }
       >
         <div className="space-y-4">
-          <p className="text-sm text-[var(--muted)]">
-            e.g. DSA with a target of 150 questions.
-          </p>
           <div>
             <label className="text-sm font-medium">Track name</label>
             <input
               type="text"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              placeholder="Track name (e.g. DSA)"
+              placeholder="Track name"
               className="mt-1 w-full rounded-lg border border-[var(--input-border)] px-4 py-2.5 text-sm dark:border-[var(--input-border)] dark:bg-[var(--input-bg)]"
             />
           </div>
@@ -252,7 +249,8 @@ export default function SubjectsPage() {
               min={0}
               value={newTotalQuestions}
               onChange={(e) => setNewTotalQuestions(e.target.value)}
-              placeholder="Target questions (e.g. 150)"
+              onWheel={(e) => e.currentTarget.blur()}
+              placeholder="Target count (optional)"
               className="mt-1 w-full rounded-lg border border-[var(--input-border)] px-4 py-2.5 text-sm dark:border-[var(--input-border)] dark:bg-[var(--input-bg)]"
             />
           </div>
