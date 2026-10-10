@@ -15,7 +15,7 @@ import {
 import Card, { CardHeader } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
-import { LoadingState, ErrorState } from "@/components/ui/StateViews";
+import { GroupDetailSkeleton, ErrorState } from "@/components/ui/StateViews";
 import InviteCodeBlock from "@/components/groups/InviteCodeBlock";
 import GroupGamificationPanel from "@/components/groups/GroupGamificationPanel";
 import QuestionListView from "@/components/questions/QuestionListView";
@@ -311,7 +311,7 @@ export default function GroupDetailPage() {
     (m) => m.userId !== user?._id && !isGroupAdminRole(m.role)
   ) ?? [];
 
-  if (loading) return <LoadingState />;
+  if (loading) return <GroupDetailSkeleton />;
   if (error) return <ErrorState message={error} onRetry={load} />;
   if (!group) return <ErrorState message="Group not found" onRetry={load} />;
 

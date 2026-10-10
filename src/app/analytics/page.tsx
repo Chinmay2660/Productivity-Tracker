@@ -6,7 +6,7 @@ import { useUser } from "@/components/providers/UserProvider";
 import { apiGet } from "@/lib/api";
 import Link from "next/link";
 import Button from "@/components/ui/Button";
-import { LoadingState, ErrorState, EmptyState } from "@/components/ui/StateViews";
+import { AnalyticsPageSkeleton, ErrorState, EmptyState } from "@/components/ui/StateViews";
 import type { AnalyticsData } from "@/types";
 
 const AnalyticsCharts = dynamic(
@@ -58,7 +58,7 @@ export default function AnalyticsPage() {
     );
   }
 
-  if (loading) return <LoadingState />;
+  if (loading) return <AnalyticsPageSkeleton />;
   if (error) return <ErrorState message={error} onRetry={load} />;
   if (!data) return null;
 

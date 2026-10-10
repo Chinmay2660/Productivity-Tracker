@@ -7,7 +7,7 @@ import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import MotivationBanner from "@/components/dashboard/MotivationBanner";
 import TaskRow, { type TaskWithNames } from "@/components/tasks/TaskRow";
-import { ErrorState, EmptyState, TaskListSkeleton } from "@/components/ui/StateViews";
+import { ErrorState, EmptyState, TasksPageSkeleton } from "@/components/ui/StateViews";
 import toast from "react-hot-toast";
 
 export default function TasksPage() {
@@ -160,6 +160,10 @@ export default function TasksPage() {
     [tasks]
   );
 
+  if (initialLoad) {
+    return <TasksPageSkeleton />;
+  }
+
   if (error && tasks.length === 0) {
     return <ErrorState message={error} onRetry={() => window.location.reload()} />;
   }
@@ -170,19 +174,17 @@ export default function TasksPage() {
         <div>
           <h1 className="text-2xl font-bold text-[var(--foreground)]">Tasks</h1>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            {initialLoad ? "Loading tasks…" : `${pending.length} pending · ${completed.length} completed`}
+            {`${pending.length} pending · ${completed.length} completed`}
           </p>
         </div>
-        <Button size="sm" onClick={() => setShowModal(true)} disabled={initialLoad}>
+        <Button size="sm" onClick={() => setShowModal(true)}>
           Add Task
         </Button>
       </div>
 
       <MotivationBanner />
 
-      {initialLoad ? (
-        <TaskListSkeleton rows={5} />
-      ) : tasks.length === 0 ? (
+      {tasks.length === 0 ? (
         <EmptyState
           title="No tasks yet"
           description="Add tasks to track what needs to be done."

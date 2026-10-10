@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { apiGet, getErrorMessage } from "@/lib/api";
-import { LoadingState, ErrorState } from "@/components/ui/StateViews";
+import { GroupShellSkeleton, ErrorState } from "@/components/ui/StateViews";
 import type { Group } from "@/types";
 
 export default function GroupShell({
@@ -37,7 +37,7 @@ export default function GroupShell({
     load();
   }, [load]);
 
-  if (loading && !group) return <LoadingState />;
+  if (loading && !group) return <GroupShellSkeleton />;
   if (error) return <ErrorState message={error} onRetry={load} />;
   if (!group) return <ErrorState message="Group not found" onRetry={load} />;
 

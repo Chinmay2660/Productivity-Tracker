@@ -9,8 +9,7 @@ import Chip from "@/components/ui/Chip";
 import Modal from "@/components/ui/Modal";
 import MotivationBanner from "@/components/dashboard/MotivationBanner";
 import {
-  TaskListSkeleton,
-  QuestionListSkeleton,
+  QuestionsPageSkeleton,
   ErrorState,
   EmptyState,
 } from "@/components/ui/StateViews";
@@ -289,16 +288,7 @@ export default function QuestionsPage() {
   }
 
   if (initialLoad && loading) {
-    return (
-      <div className="space-y-6">
-        <div className="space-y-2">
-          <div className="h-8 w-40 animate-pulse rounded-lg bg-[var(--surface-muted)]" />
-          <div className="h-4 w-64 animate-pulse rounded-lg bg-[var(--surface-muted)]" />
-        </div>
-        <TaskListSkeleton rows={3} />
-        <QuestionListSkeleton />
-      </div>
-    );
+    return <QuestionsPageSkeleton />;
   }
   if (error) return <ErrorState message={error} onRetry={load} />;
 

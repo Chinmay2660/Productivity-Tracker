@@ -10,7 +10,7 @@ import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import Chip from "@/components/ui/Chip";
 import ProgressBar, { ReadinessRing } from "@/components/ui/ProgressBar";
-import { LoadingState, ErrorState } from "@/components/ui/StateViews";
+import { MockInterviewsSkeleton, ErrorState } from "@/components/ui/StateViews";
 import { formatDate, formatDateTime, parseAppDateTime, toDateTimeLocalValue } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { canManageGroup } from "@/lib/group-roles";
@@ -277,7 +277,7 @@ export default function GroupMockInterviewsTab({
     }
   };
 
-  if (loading && !schedule) return <LoadingState message="Loading mock interviews…" />;
+  if (loading && !schedule) return <MockInterviewsSkeleton />;
   if (error && !schedule) return <ErrorState message={error} onRetry={() => load()} />;
   if (!schedule) return <ErrorState message="Schedule not found" onRetry={() => load()} />;
 

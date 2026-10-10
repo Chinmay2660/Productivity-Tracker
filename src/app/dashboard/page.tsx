@@ -110,7 +110,7 @@ export default function DashboardPage() {
     }
   };
 
-  if (initialLoad && !data && user?.activeGroupId) return <DashboardSkeleton />;
+  if (initialLoad && user?.activeGroupId) return <DashboardSkeleton />;
   if (user && !user.activeGroupId) {
     return (
       <div className="space-y-6">

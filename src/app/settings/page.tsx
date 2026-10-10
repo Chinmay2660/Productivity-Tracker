@@ -22,7 +22,7 @@ import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Chip from "@/components/ui/Chip";
 import PageHeader from "@/components/ui/PageHeader";
-import { Skeleton } from "@/components/ui/StateViews";
+import { SettingsPageSkeleton } from "@/components/ui/StateViews";
 import { apiPost, getErrorMessage } from "@/lib/api";
 import { normalizeUser } from "@/lib/user";
 import toast from "react-hot-toast";
@@ -79,7 +79,7 @@ function StatPill({ label, value }: { label: string; value: string }) {
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { user, updateUser, logout } = useUser();
+  const { user, loading, updateUser, logout } = useUser();
   const { theme, setTheme } = useTheme();
   const profile = user ? normalizeUser(user) : null;
   const [dailyMinutes, setDailyMinutes] = useState(profile?.dailyStudyMinutes ?? 120);
@@ -174,15 +174,8 @@ export default function SettingsPage() {
     router.push("/login");
   };
 
-  if (!user || !profile) {
-    return (
-      <div className="mx-auto max-w-2xl space-y-4">
-        <Skeleton className="h-8 w-32" />
-        <Skeleton className="h-28 w-full rounded-2xl" />
-        <Skeleton className="h-48 w-full rounded-2xl" />
-        <Skeleton className="h-40 w-full rounded-2xl" />
-      </div>
-    );
+  if (loading || !user || !profile) {
+    return <SettingsPageSkeleton />;
   }
 
   return (

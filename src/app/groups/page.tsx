@@ -10,7 +10,7 @@ import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import PageHeader from "@/components/ui/PageHeader";
 import { Input } from "@/components/ui/Input";
-import { LoadingState, ErrorState, EmptyState } from "@/components/ui/StateViews";
+import { GroupsPageSkeleton, ErrorState, EmptyState } from "@/components/ui/StateViews";
 import InviteCodeBlock from "@/components/groups/InviteCodeBlock";
 import { formatDate, isGroupFull, JOIN_CODE_TTL_MINUTES, MAX_GROUP_MEMBERS } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -110,7 +110,7 @@ export default function GroupsPage() {
     }
   };
 
-  if (loading) return <LoadingState />;
+  if (loading) return <GroupsPageSkeleton />;
   if (error) return <ErrorState message={error} onRetry={load} />;
 
   const headerActions = (
