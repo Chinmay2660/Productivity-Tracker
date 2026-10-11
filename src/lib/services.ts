@@ -528,6 +528,45 @@ export async function deleteGroupData(groupId: string) {
   ]);
 }
 
+/** Removes a track and its questions, topics, tasks, and related progress. */
+export async function deleteSubjectData(subjectId: string) {
+  const sid = new mongoose.Types.ObjectId(subjectId);
+  const [questionIds, topicIds] = await Promise.all([
+    PracticeQuestion.find({ subjectId: sid }).distinct("_id"),
+    Topic.find({ subjectId: sid }).distinct("_id"),
+  ]);
+
+  await PracticeQuestion.deleteMany({
+    $or: [
+      { subjectId: sid },
+      ...(questionIds.length > 0
+        ? [{ sourceGroupQuestionId: { $in: questionIds }, scope: "personal" as const }]
+        : []),
+    ],
+  });
+
+  await Promise.all([
+    questionIds.length > 0
+      ? QuestionProgress.deleteMany({ questionId: { $in: questionIds } })
+      : Promise.resolve(),
+    topicIds.length > 0
+      ? TopicProgress.deleteMany({ topicId: { $in: topicIds } })
+      : Promise.resolve(),
+    Topic.deleteMany({ subjectId: sid }),
+    PrepTask.deleteMany({
+      $or: [
+        { subjectId: sid },
+        ...(questionIds.length > 0 ? [{ questionId: { $in: questionIds } }] : []),
+      ],
+    }),
+    MockInterview.deleteMany({ subjectId: sid }),
+    MockInterviewSession.deleteMany({ "questions.subjectId": sid }),
+    StudySession.deleteMany({ subjectId: sid }),
+    PreparationPlan.deleteMany({ subjectId: sid }),
+    Subject.deleteOne({ _id: sid }),
+  ]);
+}
+
 export async function clearActiveGroupForMembers(groupId: string) {
   await User.updateMany(
     { activeGroupId: new mongoose.Types.ObjectId(groupId) },

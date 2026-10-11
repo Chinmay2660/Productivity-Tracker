@@ -3,7 +3,14 @@
 import clsx from "clsx";
 import { ButtonHTMLAttributes } from "react";
 
-type Variant = "primary" | "secondary" | "outline" | "danger" | "ghost";
+type Variant =
+  | "primary"
+  | "secondary"
+  | "outline"
+  | "success"
+  | "danger"
+  | "dangerOutline"
+  | "ghost";
 type Size = "sm" | "md" | "lg";
 
 const VARIANT: Record<Variant, string> = {
@@ -12,9 +19,13 @@ const VARIANT: Record<Variant, string> = {
   secondary:
     "bg-stone-900 text-white hover:bg-stone-800 focus-visible:shadow-focus dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-white disabled:opacity-50",
   outline:
-    "bg-[var(--surface-muted)] text-[var(--foreground)] hover:bg-[var(--chip-bg-hover)] focus-visible:shadow-focus disabled:opacity-50",
+    "border border-[var(--border)] bg-[var(--surface-muted)] text-[var(--foreground)] hover:bg-[var(--chip-bg-hover)] focus-visible:shadow-focus disabled:opacity-50",
+  success:
+    "border border-success/45 bg-success/12 text-success hover:border-success/55 hover:bg-success/20 focus-visible:shadow-focus disabled:opacity-50",
   danger:
     "bg-danger text-white hover:brightness-110 focus-visible:shadow-focus disabled:opacity-50",
+  dangerOutline:
+    "border border-danger/40 bg-transparent text-danger hover:border-danger/55 hover:bg-danger/10 focus-visible:shadow-focus disabled:opacity-50",
   ghost:
     "text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] focus-visible:shadow-focus disabled:opacity-50",
 };
