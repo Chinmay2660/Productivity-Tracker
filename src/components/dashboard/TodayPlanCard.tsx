@@ -135,26 +135,34 @@ export default function TodayPlanCard({
       />
       {total === 0 ? (
         <p className="text-sm text-[var(--muted)]">
-          Add group or personal questions with today&apos;s practice date to see them here.
+          Add group or personal questions with today&apos;s practice date to see them here. Use{" "}
+          <Link href="/questions" className="text-brand hover:underline">
+            Questions → Today
+          </Link>{" "}
+          or set a practice date on unscheduled items.
         </p>
       ) : (
         <div className="space-y-6">
-          <QuestionSection
-            title="Group"
-            subtitle="Shared with everyone — each member tracks their own progress"
-            questions={todayQuestions.group}
-            emptyMessage="No group questions for today."
-            onStatusChange={onStatusChange}
-            pointBurst={pointBurst}
-          />
-          <QuestionSection
-            title="Personal"
-            subtitle="Only you — your private practice questions"
-            questions={todayQuestions.personal}
-            emptyMessage="No personal questions for today."
-            onStatusChange={onStatusChange}
-            pointBurst={pointBurst}
-          />
+          {groupCount > 0 && (
+            <QuestionSection
+              title="Group"
+              subtitle="Shared with everyone — each member tracks their own progress"
+              questions={todayQuestions.group}
+              emptyMessage="No group questions for today."
+              onStatusChange={onStatusChange}
+              pointBurst={pointBurst}
+            />
+          )}
+          {personalCount > 0 && (
+            <QuestionSection
+              title="Personal"
+              subtitle="Only you — your private practice questions"
+              questions={todayQuestions.personal}
+              emptyMessage="No personal questions for today."
+              onStatusChange={onStatusChange}
+              pointBurst={pointBurst}
+            />
+          )}
         </div>
       )}
     </Card>

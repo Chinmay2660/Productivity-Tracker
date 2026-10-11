@@ -18,6 +18,7 @@ import Modal from "@/components/ui/Modal";
 import { GroupDetailSkeleton, ErrorState } from "@/components/ui/StateViews";
 import InviteCodeBlock from "@/components/groups/InviteCodeBlock";
 import GroupGamificationPanel from "@/components/groups/GroupGamificationPanel";
+import { useGroupHeaderActions } from "@/components/groups/GroupShell";
 import QuestionListView from "@/components/questions/QuestionListView";
 import TablePagination from "@/components/ui/TablePagination";
 import {
@@ -27,6 +28,7 @@ import {
   MAX_GROUP_MEMBERS,
   normalizeQuestionStatus,
   sliceTablePage,
+  GROUP_QUESTIONS_PAGE_SIZE,
   TABLE_PAGE_SIZE,
   DEFAULT_QUESTION_TABLE_SORT,
   toggleQuestionSort,
@@ -146,10 +148,12 @@ export default function GroupDetailPage() {
     setQuestionsLoading(true);
     try {
       const data = await apiGet<PagedGroupQuestions>(
-        `/api/practice-questions?groupId=${groupId}&scope=group&period=all&page=${questionPage}&limit=${TABLE_PAGE_SIZE}&sortBy=${questionSortBy}&sortDir=${questionSortDir}`
+        `/api/practice-questions?groupId=${groupId}&scope=group&period=all&page=${questionPage}&limit=${GROUP_QUESTIONS_PAGE_SIZE}&sortBy=${questionSortBy}&sortDir=${questionSortDir}`
       );
-      setGroupQuestions(data.items);
-      setQuestionTotal(data.total);
+      const items = Array.isArray(data) ? data : (data.items ?? []);
+      const total = Array.isArray(data) ? data.length : (data.total ?? items.length);
+      setGroupQuestions(items);
+      setQuestionTotal(total);
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to load group questions"));
     } finally {
@@ -272,14 +276,29 @@ export default function GroupDetailPage() {
   ) as GroupRole | undefined;
   const isGroupAdmin = isGroupAdminRole(myRole);
   const canEditGroup = canManageGroup(myRole);
+  const setHeaderActions = useGroupHeaderActions();
 
-  const openEditModal = () => {
+  const openEditModal = useCallback(() => {
     if (!group) return;
     setEditName(group.name);
     setEditDescription(group.description ?? "");
     setTransferTargetId("");
     setShowEditModal(true);
-  };
+  }, [group]);
+
+  useEffect(() => {
+    if (!setHeaderActions) return;
+    if (canEditGroup) {
+      setHeaderActions(
+        <Button variant="outline" size="sm" onClick={openEditModal}>
+          Edit Group
+        </Button>
+      );
+    } else {
+      setHeaderActions(null);
+    }
+    return () => setHeaderActions(null);
+  }, [canEditGroup, setHeaderActions, openEditModal]);
 
   const saveGroup = async () => {
     if (!editName.trim()) return;
@@ -378,13 +397,52 @@ export default function GroupDetailPage() {
 
   return (
     <div className="space-y-6">
-      {canEditGroup && (
-        <div className="flex flex-wrap justify-end gap-2">
-          <Button variant="outline" size="sm" onClick={openEditModal}>
-            Edit Group
-          </Button>
-        </div>
-      )}
+      <Card>
+        <CardHeader
+          title="Group Questions"
+          subtitle={
+            questionTotal > 0
+              ? `${questionTotal} shared question${questionTotal === 1 ? "" : "s"} — each member tracks their own progress`
+              : "Shared with everyone — each member tracks their own progress"
+          }
+          action={
+            <div className="flex gap-2">
+              <Link href="/questions">
+                <Button variant="outline" size="sm">View All</Button>
+              </Link>
+              {canEditGroup && (
+                <Button size="sm" onClick={() => setShowQuestionModal(true)} disabled={subjects.length === 0}>
+                  Add Question
+                </Button>
+              )}
+            </div>
+          }
+        />
+        {questionTotal === 0 && !questionsLoading ? (
+          <p className="text-sm text-[var(--muted)]">
+            No group questions yet. Add questions everyone should practice together.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            <QuestionListView
+              pointBurst={pointBurst}
+              questions={groupQuestions.map((q) => ({ ...q, scope: "group" as const }))}
+              onStatusChange={updateQuestionStatus}
+              sortBy={questionSortBy}
+              sortDir={questionSortDir}
+              onSort={handleQuestionSort}
+              loading={questionsLoading}
+            />
+            <TablePagination
+              page={questionPage}
+              total={questionTotal}
+              pageSize={GROUP_QUESTIONS_PAGE_SIZE}
+              loading={questionsLoading}
+              onPageChange={setQuestionPage}
+            />
+          </div>
+        )}
+      </Card>
 
       {group.gamification && <GroupGamificationPanel gamification={group.gamification} />}
 
@@ -481,48 +539,6 @@ export default function GroupDetailPage() {
             onPageChange={setMemberPage}
           />
         </div>
-      </Card>
-
-      <Card>
-        <CardHeader
-          title="Group Questions"
-          subtitle="Shared with everyone — each member tracks their own progress"
-          action={
-            <div className="flex gap-2">
-              <Link href="/questions">
-                <Button variant="outline" size="sm">View All</Button>
-              </Link>
-              {canEditGroup && (
-                <Button size="sm" onClick={() => setShowQuestionModal(true)} disabled={subjects.length === 0}>
-                  Add Question
-                </Button>
-              )}
-            </div>
-          }
-        />
-        {questionTotal === 0 && !questionsLoading ? (
-          <p className="text-sm text-[var(--muted)]">
-            No group questions yet. Add questions everyone should practice together.
-          </p>
-        ) : (
-          <div className="space-y-3">
-            <QuestionListView
-              pointBurst={pointBurst}
-              questions={groupQuestions.map((q) => ({ ...q, scope: "group" as const }))}
-              onStatusChange={updateQuestionStatus}
-              sortBy={questionSortBy}
-              sortDir={questionSortDir}
-              onSort={handleQuestionSort}
-              loading={questionsLoading}
-            />
-            <TablePagination
-              page={questionPage}
-              total={questionTotal}
-              loading={questionsLoading}
-              onPageChange={setQuestionPage}
-            />
-          </div>
-        )}
       </Card>
 
       <Card>

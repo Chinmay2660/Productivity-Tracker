@@ -382,6 +382,8 @@ export const DEFAULT_QUESTION_TABLE_SORT: {
 };
 
 export const TABLE_PAGE_SIZE = 10;
+/** Group detail embed — smaller pages so pagination is visible sooner. */
+export const GROUP_QUESTIONS_PAGE_SIZE = 5;
 
 export function sliceTablePage<T>(items: T[], page: number, pageSize = TABLE_PAGE_SIZE): T[] {
   const start = (page - 1) * pageSize;
