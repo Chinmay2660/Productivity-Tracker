@@ -9,11 +9,15 @@ import {
   formatSubjectTrack,
   normalizeQuestionStatus,
   questionDatePeriodRange,
+  practiceQuestionScheduledInPeriod,
   compareQuestions,
+  DEFAULT_QUESTION_TABLE_SORT,
   type QuestionDatePeriod,
   type QuestionSortField,
   type QuestionSortDir,
   resolveQuestionBody,
+  escapeRegex,
+  questionMatchesSearch,
 } from "@/lib/utils";
 import {
   serializeDoc,
@@ -74,12 +78,7 @@ export async function GET(request: Request) {
       const { start, end } = periodRange;
       questionFilter.$and = [
         ...(Array.isArray(questionFilter.$and) ? questionFilter.$and : []),
-        {
-          $or: [
-            { practiceDate: { $gte: start, $lt: end } },
-            { practiceDate: { $exists: false }, createdAt: { $gte: start, $lt: end } },
-          ],
-        },
+        practiceQuestionScheduledInPeriod(start, end),
       ];
     }
 
@@ -97,16 +96,47 @@ export async function GET(request: Request) {
       sortByParam === "date" ||
       sortByParam === "scope"
         ? sortByParam
-        : "date";
-    const sortDir: QuestionSortDir = searchParams.get("sortDir") === "asc" ? "asc" : "desc";
-    const mongoDir = sortDir === "asc" ? 1 : -1;
+        : DEFAULT_QUESTION_TABLE_SORT.sortBy;
+    const sortDirParam = searchParams.get("sortDir");
+    const sortDir: QuestionSortDir =
+      sortDirParam === "asc" || sortDirParam === "desc"
+        ? sortDirParam
+        : DEFAULT_QUESTION_TABLE_SORT.sortDir;
+    const searchTerm = searchParams.get("search")?.trim() ?? "";
 
-    const subjectQuery = Subject.find({
+    const subjects = await Subject.find({
       $or: [
         { groupId, scope: "group", isActive: true },
         { userId, scope: "personal", isActive: true },
       ],
     }).lean();
+
+    const activeSubjectIds = subjects.map((s) => s._id);
+    if (activeSubjectIds.length === 0) {
+      if (paginate) {
+        return jsonOk({ items: [], total: 0, page, limit });
+      }
+      return jsonOk([]);
+    }
+    questionFilter.$and = [
+      ...(Array.isArray(questionFilter.$and) ? questionFilter.$and : []),
+      { subjectId: { $in: activeSubjectIds } },
+    ];
+
+    if (searchTerm) {
+      const regex = new RegExp(escapeRegex(searchTerm), "i");
+      const matchingSubjectIds = subjects
+        .filter((s) => regex.test(s.name))
+        .map((s) => s._id);
+      const searchOr: Record<string, unknown>[] = [{ content: regex }];
+      if (matchingSubjectIds.length > 0) {
+        searchOr.push({ subjectId: { $in: matchingSubjectIds } });
+      }
+      questionFilter.$and = [
+        ...(Array.isArray(questionFilter.$and) ? questionFilter.$and : []),
+        { $or: searchOr },
+      ];
+    }
 
     const mapQuestion = (
       q: {
@@ -124,7 +154,7 @@ export async function GET(request: Request) {
       progressMap: Map<string, { status?: string; confidence?: string; lastPracticed?: Date; notes?: string }>
     ) => {
       const base = serializeDoc(q);
-      const practiceDate = (q.practiceDate ?? q.createdAt).toISOString();
+      const practiceDate = q.practiceDate?.toISOString();
       const subject = subjectMap.get(String(q.subjectId));
       const trackLabel = subject
         ? formatSubjectTrack({
@@ -175,43 +205,26 @@ export async function GET(request: Request) {
     const questionFields =
       "_id scope subjectId topicId practiceDate createdAt status confidence lastPracticed notes content link difficulty userId groupId";
 
-    const questionsForPage = async () => {
-      let query = PracticeQuestion.find(questionFilter)
-        .select(questionFields)
-        .sort({
-          practiceDate: mongoDir,
-          createdAt: mongoDir,
-        });
-      if (paginate) query = query.skip(skip).limit(limit);
-      return query.lean();
-    };
-
-    let result;
-    let total = 0;
-    if (sortBy === "date") {
-      const [subjects, count, questions] = await Promise.all([
-        subjectQuery,
-        paginate ? PracticeQuestion.countDocuments(questionFilter) : Promise.resolve(0),
-        questionsForPage(),
-      ]);
-      total = count;
-      const subjectMap = new Map(subjects.map((s) => [String(s._id), s]));
-      const progressMap = await progressForQuestions(questions);
-      result = questions.map((q) => mapQuestion(q, subjectMap, progressMap));
-    } else {
-      const [subjects, count, questions] = await Promise.all([
-        subjectQuery,
-        paginate ? PracticeQuestion.countDocuments(questionFilter) : Promise.resolve(0),
-        PracticeQuestion.find(questionFilter).select(questionFields).lean(),
-      ]);
-      total = count;
-      const subjectMap = new Map(subjects.map((s) => [String(s._id), s]));
-      const progressMap = await progressForQuestions(questions);
-      result = questions
-        .map((q) => mapQuestion(q, subjectMap, progressMap))
-        .sort((a, b) => compareQuestions(a, b, sortBy, sortDir));
-      if (paginate) result = result.slice(skip, skip + limit);
+    const questions = await PracticeQuestion.find(questionFilter).select(questionFields).lean();
+    const subjectMap = new Map(subjects.map((s) => [String(s._id), s]));
+    const progressMap = await progressForQuestions(questions);
+    let result = questions
+      .map((q) => mapQuestion(q, subjectMap, progressMap))
+      .sort((a, b) => compareQuestions(a, b, sortBy, sortDir));
+    if (searchTerm) {
+      result = result.filter((q) =>
+        questionMatchesSearch(
+          {
+            content: String((q as { content?: string }).content ?? ""),
+            trackLabel: q.trackLabel,
+            subjectName: q.subjectName,
+          },
+          searchTerm
+        )
+      );
     }
+    const total = result.length;
+    if (paginate) result = result.slice(skip, skip + limit);
 
     if (paginate) {
       return jsonOk({ items: result, total, page, limit });
@@ -259,7 +272,7 @@ export async function POST(request: Request) {
     }
 
     const subject = await Subject.findById(subjectId).lean();
-    if (!subject) return jsonError("Subject not found", 404);
+    if (!subject || !subject.isActive) return jsonError("Subject not found", 404);
     if (scope === "group" && subject.scope !== "group") {
       return jsonError("Group questions must use a group subject");
     }
@@ -279,7 +292,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const parsedPracticeDate = practiceDate ? parseDateInput(practiceDate) : startOfDay(new Date());
+    const parsedPracticeDate = practiceDate ? parseDateInput(practiceDate) : undefined;
 
     const question = await PracticeQuestion.create({
       userId,
@@ -287,7 +300,7 @@ export async function POST(request: Request) {
       scope,
       subjectId,
       topicId: topicId || undefined,
-      practiceDate: parsedPracticeDate,
+      ...(parsedPracticeDate ? { practiceDate: parsedPracticeDate } : {}),
       content: questionContent,
       link: link?.trim(),
       difficulty: difficulty ?? "medium",

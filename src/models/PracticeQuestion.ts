@@ -7,7 +7,7 @@ export interface IPracticeQuestion extends Document {
   sourceGroupQuestionId?: mongoose.Types.ObjectId;
   subjectId: mongoose.Types.ObjectId;
   topicId?: mongoose.Types.ObjectId;
-  practiceDate: Date;
+  practiceDate?: Date;
   content: string;
   link?: string;
   difficulty: "easy" | "medium" | "hard";
@@ -29,7 +29,7 @@ const PracticeQuestionSchema = new Schema<IPracticeQuestion>(
     sourceGroupQuestionId: { type: Schema.Types.ObjectId, ref: "PracticeQuestion" },
     subjectId: { type: Schema.Types.ObjectId, ref: "Subject", required: true },
     topicId: { type: Schema.Types.ObjectId, ref: "Topic" },
-    practiceDate: { type: Date, required: true },
+    practiceDate: { type: Date },
     content: { type: String, required: true, trim: true },
     link: { type: String, trim: true },
     difficulty: { type: String, enum: ["easy", "medium", "hard"], default: "medium" },

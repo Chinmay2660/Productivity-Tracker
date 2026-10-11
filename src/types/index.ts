@@ -238,7 +238,7 @@ export interface PracticeQuestion {
   sourceGroupQuestionId?: string;
   subjectId: string;
   topicId?: string;
-  practiceDate: string;
+  practiceDate?: string;
   content: string;
   link?: string;
   difficulty: QuestionDifficulty;
@@ -350,7 +350,7 @@ export interface TodayQuestion {
   subjectName: string;
   trackLabel: string;
   status: QuestionStatus;
-  practiceDate: string;
+  practiceDate?: string;
   link?: string;
 }
 

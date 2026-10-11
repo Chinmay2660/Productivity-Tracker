@@ -3,6 +3,7 @@ import Script from "next/script";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { ThemeProvider, ThemeSync } from "@/components/providers/ThemeProvider";
 import { UserProvider } from "@/components/providers/UserProvider";
+import { ConfirmProvider } from "@/components/providers/ConfirmProvider";
 import AppShell from "@/components/layout/AppShell";
 import ClientToaster from "@/components/ui/ClientToaster";
 import "./globals.css";
@@ -31,11 +32,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {themeScript}
         </Script>
         <ThemeProvider>
-          <UserProvider>
-            <ThemeSync />
-            <AppShell>{children}</AppShell>
-            <ClientToaster />
-          </UserProvider>
+          <ConfirmProvider>
+            <UserProvider>
+              <ThemeSync />
+              <AppShell>{children}</AppShell>
+              <ClientToaster />
+            </UserProvider>
+          </ConfirmProvider>
         </ThemeProvider>
       </body>
     </html>

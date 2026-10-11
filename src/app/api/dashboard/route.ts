@@ -51,7 +51,12 @@ export async function GET(request: Request) {
     ] = await Promise.all([
       getGroupInsights(groupId, memberIds),
       getTodayQuestionsForUser(userId, groupId),
-      Subject.find({ groupId, isActive: true }).lean(),
+      Subject.find({
+        $or: [
+          { groupId, scope: "group", isActive: true },
+          { userId, scope: "personal", isActive: true },
+        ],
+      }).lean(),
       PracticeQuestion.find({ groupId, scope: "group" })
         .select("_id subjectId practiceDate createdAt")
         .lean(),
@@ -79,16 +84,25 @@ export async function GET(request: Request) {
           }).lean()
         : [];
 
+    const activeSubjectIds = new Set(subjects.map((s) => String(s._id)));
+    const visibleGroupQuestions = groupQuestions.filter((q) =>
+      activeSubjectIds.has(String(q.subjectId))
+    );
+    const visiblePersonalQuestions = personalQuestions.filter((q) =>
+      activeSubjectIds.has(String(q.subjectId))
+    );
+
     const todayStr = toDateInputValue(new Date());
     const questionsToday =
-      countQuestionsOnDay(groupQuestions, todayStr) +
-      countQuestionsOnDay(personalQuestions, todayStr);
+      countQuestionsOnDay(visibleGroupQuestions, todayStr) +
+      countQuestionsOnDay(visiblePersonalQuestions, todayStr);
     const groupQuestionStats = buildGroupDoneQuestionStats(
-      groupQuestions,
+      visibleGroupQuestions,
       memberIds,
       questionProgress
     );
-    const subjectStats = subjects.map((s) => {
+    const groupSubjects = subjects.filter((s) => s.scope === "group");
+    const subjectStats = groupSubjects.map((s) => {
       const qStats = groupQuestionStats.get(String(s._id));
       const questionCount = qStats?.count ?? 0;
       const totalQuestions = s.totalQuestions ?? 0;

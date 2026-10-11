@@ -8,6 +8,7 @@ import {
   joinCodeSecondsRemaining,
 } from "@/lib/utils";
 import toast from "react-hot-toast";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
 
 type InviteCodeBlockProps = {
   joinCode?: string;
@@ -26,6 +27,7 @@ export default function InviteCodeBlock({
   compact,
   inline,
 }: InviteCodeBlockProps) {
+  const confirm = useConfirm();
   const [secondsLeft, setSecondsLeft] = useState(0);
   const valid =
     Boolean(joinCode) && Boolean(joinCodeExpiresAt) && isJoinCodeActive(joinCode!, joinCodeExpiresAt);
@@ -50,9 +52,13 @@ export default function InviteCodeBlock({
   const requestNewCode = async () => {
     if (!onGenerate) return;
     if (valid && secondsLeft > 0) {
-      const ok = window.confirm(
-        "Replace the current invite code? Anyone with the old code won't be able to join."
-      );
+      const ok = await confirm({
+        title: "Replace invite code?",
+        message:
+          "Replace the current invite code? Anyone with the old code won't be able to join.",
+        confirmLabel: "Replace",
+        variant: "default",
+      });
       if (!ok) return;
       await onGenerate({ force: true });
       return;

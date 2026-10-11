@@ -26,13 +26,22 @@ export async function GET(request: Request) {
     const groupId = searchParams.get("groupId");
     const scope = searchParams.get("scope") as ContentScope | "all" | null;
     const minimal = searchParams.get("minimal") === "1";
+    const includeInactive = searchParams.get("includeInactive") === "1";
 
     const subjectFilter: Record<string, unknown>[] = [];
     if (groupId && (!scope || scope === "all" || scope === "group")) {
-      subjectFilter.push({ groupId, scope: "group", isActive: true });
+      subjectFilter.push({
+        groupId,
+        scope: "group",
+        ...(includeInactive ? {} : { isActive: true }),
+      });
     }
     if (!scope || scope === "all" || scope === "personal") {
-      subjectFilter.push({ userId, scope: "personal", isActive: true });
+      subjectFilter.push({
+        userId,
+        scope: "personal",
+        ...(includeInactive ? {} : { isActive: true }),
+      });
     }
 
     if (subjectFilter.length === 0) {

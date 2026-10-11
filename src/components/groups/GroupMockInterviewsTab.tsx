@@ -1,9 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
-import { CalendarDays, CheckCircle2, Clock, Users } from "lucide-react";
 import { apiGet, apiPatch, apiPost, getErrorMessage } from "@/lib/api";
 import Card, { CardHeader } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
@@ -83,29 +82,6 @@ function ViewModeTabs({
           {tab.label}
         </button>
       ))}
-    </div>
-  );
-}
-
-function StatTile({
-  icon,
-  label,
-  value,
-  hint,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: string;
-  hint?: string;
-}) {
-  return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)]/60 p-3">
-      <div className="flex items-center gap-2 text-[var(--muted)]">
-        <span className="text-brand">{icon}</span>
-        <span className="text-[10px] font-semibold uppercase tracking-wide">{label}</span>
-      </div>
-      <p className="mt-1.5 text-sm font-semibold text-[var(--foreground)]">{value}</p>
-      {hint ? <p className="mt-0.5 text-[11px] text-[var(--muted)]">{hint}</p> : null}
     </div>
   );
 }
@@ -286,13 +262,6 @@ export default function GroupMockInterviewsTab({
   const inProgressCount = schedule.members.filter((m) => m.status === "in_progress").length;
   const completionPct =
     memberTotal > 0 ? Math.round((completedCount / memberTotal) * 100) : 0;
-  const scoredMembers = schedule.members.filter((m) => m.averageScore !== null);
-  const groupAvgScore =
-    scoredMembers.length > 0
-      ? Math.round(
-          scoredMembers.reduce((sum, m) => sum + (m.averageScore ?? 0), 0) / scoredMembers.length
-        )
-      : null;
   const currentRoundHasDate = Boolean(activeRound?.interviewDate);
   const isMockToday = schedule.canGenerate;
   const roundDateLabel = activeRound?.interviewDate
@@ -378,47 +347,6 @@ export default function GroupMockInterviewsTab({
                   ))}
                 </div>
               )}
-            </div>
-
-            <div className="mb-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              <StatTile
-                icon={<CalendarDays className="h-3.5 w-3.5" aria-hidden />}
-                label="Mock day"
-                value={
-                  isHistory
-                    ? activeRound?.interviewDate
-                      ? formatDate(activeRound.interviewDate)
-                      : "—"
-                    : isMockToday
-                      ? "Today"
-                      : currentRoundHasDate
-                        ? formatDate(activeRound!.interviewDate!)
-                        : "TBD"
-                }
-                hint={!isHistory && isMockToday ? "You can generate questions" : undefined}
-              />
-              <StatTile
-                icon={<Users className="h-3.5 w-3.5" aria-hidden />}
-                label="Team"
-                value={`${memberTotal} members`}
-                hint={`${completedCount} finished this round`}
-              />
-              <StatTile
-                icon={<CheckCircle2 className="h-3.5 w-3.5" aria-hidden />}
-                label="Completion"
-                value={`${completionPct}%`}
-                hint={`${completedCount}/${memberTotal} done`}
-              />
-              <StatTile
-                icon={<Clock className="h-3.5 w-3.5" aria-hidden />}
-                label="Avg score"
-                value={groupAvgScore !== null ? `${groupAvgScore}/100` : "—"}
-                hint={
-                  scoredMembers.length > 0
-                    ? `From ${scoredMembers.length} scored`
-                    : "No scores yet"
-                }
-              />
             </div>
           </>
         )}

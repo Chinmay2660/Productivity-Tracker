@@ -1,16 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import clsx from "clsx";
-import { ChevronDown, ChevronUp, Eye } from "lucide-react";
+import { ChevronDown, ChevronUp, ExternalLink, Eye } from "lucide-react";
 import Button from "@/components/ui/Button";
 import QuestionPreviewModal from "@/components/questions/QuestionPreviewModal";
 import QuestionPointsBurst from "@/components/questions/QuestionPointsBurst";
 import QuestionScopeChip from "@/components/questions/QuestionScopeChip";
 import QuestionStatusSelect from "@/components/questions/QuestionStatusSelect";
 import type { QuestionPointBurst } from "@/lib/question-points-burst";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
 import {
+  DEFAULT_QUESTION_TABLE_SORT,
   formatDate,
+  questionMatchesSearch,
   questionRowVars,
   splitQuestionFields,
   type QuestionSortDir,
@@ -31,8 +34,27 @@ export type QuestionListItem = {
 };
 
 function questionDateLabel(q: QuestionListItem): string {
-  const date = q.practiceDate ?? q.createdAt;
-  return date ? formatDate(date) : "—";
+  return q.practiceDate ? formatDate(q.practiceDate) : "Unscheduled";
+}
+
+function QuestionLinkCell({ link }: { link?: string }) {
+  if (!link?.trim()) {
+    return <span className="text-[var(--muted)]">—</span>;
+  }
+  const href = link.trim();
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label="Open resource link"
+      title={href}
+      className="inline-flex rounded-lg p-1.5 text-[var(--muted)] transition-colors hover:bg-[var(--surface-muted)] hover:text-brand"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <ExternalLink className="h-4 w-4" aria-hidden />
+    </a>
+  );
 }
 
 function SortableHeader({
@@ -88,6 +110,7 @@ export default function QuestionListView({
   onSort,
   loading = false,
   pointBurst = null,
+  localSearch = "",
 }: {
   questions: QuestionListItem[];
   onStatusChange: (id: string, status: QuestionStatus) => void;
@@ -100,20 +123,49 @@ export default function QuestionListView({
   sortDir?: QuestionSortDir;
   onSort?: (field: QuestionSortField) => void;
   loading?: boolean;
+  /** Client-side filter on the current rows (title or track). */
+  localSearch?: string;
 }) {
+  const activeSortBy = sortBy ?? DEFAULT_QUESTION_TABLE_SORT.sortBy;
+  const activeSortDir = sortDir ?? DEFAULT_QUESTION_TABLE_SORT.sortDir;
+
+  const visibleQuestions = useMemo(() => {
+    if (!localSearch.trim()) return questions;
+    return questions.filter((q) => questionMatchesSearch(q, localSearch));
+  }, [questions, localSearch]);
+
   const questionCol = "min-w-[14rem] lg:min-w-[18rem]";
   const scopeCol = "min-w-[6.5rem]";
   const statusCol = "min-w-[10rem]";
   const dateCol = "min-w-[8.5rem]";
   const trackCol = "min-w-[7rem]";
-  const viewCol = "w-12";
+  const linkCol = "w-14";
+  const viewCol = "w-14";
   const actionsCol = "min-w-[9rem]";
   const [preview, setPreview] = useState<QuestionListItem | null>(null);
+  const confirm = useConfirm();
+  const tableColSpan =
+    6 + (showScope ? 1 : 0) + (showActions ? 1 : 0);
+
+  const handleDelete = async (q: QuestionListItem) => {
+    if (!onDelete) return;
+    const title = splitQuestionFields(q.content).title;
+    const ok = await confirm({
+      title: "Delete question?",
+      message: `Delete "${title}"? This cannot be undone.`,
+      confirmLabel: "Delete",
+    });
+    if (!ok) return;
+    onDelete(q._id);
+  };
 
   return (
     <>
       <div className={clsx("space-y-3 lg:hidden", loading && "opacity-60")}>
-        {questions.map((q) => (
+        {visibleQuestions.length === 0 ? (
+          <p className="text-sm text-[var(--muted)]">No questions match your search.</p>
+        ) : null}
+        {visibleQuestions.map((q) => (
           <div
             key={q._id}
             style={questionRowVars(q.status)}
@@ -151,6 +203,10 @@ export default function QuestionListView({
               <span className="rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5">
                 {q.trackLabel || q.subjectName}
               </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="font-medium text-[var(--foreground)]">Link</span>
+                <QuestionLinkCell link={q.link} />
+              </span>
             </div>
             {showActions && (onEdit || onDelete) && (
               <div className="mt-3 flex justify-end gap-1">
@@ -160,7 +216,7 @@ export default function QuestionListView({
                   </Button>
                 )}
                 {onDelete && (
-                  <Button variant="ghost" size="sm" onClick={() => onDelete(q._id)}>
+                  <Button variant="ghost" size="sm" onClick={() => handleDelete(q)}>
                     Delete
                   </Button>
                 )}
@@ -177,7 +233,7 @@ export default function QuestionListView({
         )}
       >
         <div className="overflow-x-auto">
-        <table className="w-full min-w-[44rem] border-separate border-spacing-y-1 text-left text-sm">
+        <table className="w-full min-w-[48rem] border-separate border-spacing-y-1 text-left text-sm">
           <thead className="bg-[var(--surface-muted)] text-xs uppercase tracking-wide text-[var(--muted)]">
             <tr>
               <th className={`${questionCol} px-4 py-3 font-semibold`}>Question</th>
@@ -185,8 +241,8 @@ export default function QuestionListView({
                 <SortableHeader
                   label="Scope"
                   field="scope"
-                  sortBy={sortBy}
-                  sortDir={sortDir}
+                  sortBy={activeSortBy}
+                  sortDir={activeSortDir}
                   onSort={onSort}
                   className={`${scopeCol} px-4 py-3`}
                 />
@@ -194,33 +250,43 @@ export default function QuestionListView({
               <SortableHeader
                 label="Status"
                 field="status"
-                sortBy={sortBy}
-                sortDir={sortDir}
+                sortBy={activeSortBy}
+                sortDir={activeSortDir}
                 onSort={onSort}
                 className={`${statusCol} px-4 py-3`}
               />
               <SortableHeader
                 label="Date"
                 field="date"
-                sortBy={sortBy}
-                sortDir={sortDir}
+                sortBy={activeSortBy}
+                sortDir={activeSortDir}
                 onSort={onSort}
                 className={`${dateCol} px-4 py-3`}
               />
               <SortableHeader
                 label="Track"
                 field="track"
-                sortBy={sortBy}
-                sortDir={sortDir}
+                sortBy={activeSortBy}
+                sortDir={activeSortDir}
                 onSort={onSort}
                 className={`${trackCol} px-4 py-3`}
               />
-              <th className={`${viewCol} px-2 py-3 font-semibold`} aria-label="View" />
-              {showActions && <th className={`${actionsCol} px-4 py-3 font-semibold`} />}
+              <th className={`${linkCol} px-2 py-3 font-semibold`}>Link</th>
+              <th className={`${viewCol} px-2 py-3 font-semibold`}>View</th>
+              {showActions && (
+                <th className={`${actionsCol} px-4 py-3 font-semibold`}>Actions</th>
+              )}
             </tr>
           </thead>
           <tbody>
-            {questions.map((q) => (
+            {visibleQuestions.length === 0 ? (
+              <tr>
+                <td colSpan={tableColSpan} className="px-4 py-8 text-center text-sm text-[var(--muted)]">
+                  No questions match your search.
+                </td>
+              </tr>
+            ) : null}
+            {visibleQuestions.map((q) => (
               <tr
                 key={q._id}
                 className={clsx(
@@ -261,7 +327,10 @@ export default function QuestionListView({
                     {q.trackLabel || q.subjectName}
                   </span>
                 </td>
-                <td className="qs-row-cell px-2 py-3.5 text-center">
+                <td className={`qs-row-cell px-2 py-3.5 text-center ${linkCol}`}>
+                  <QuestionLinkCell link={q.link} />
+                </td>
+                <td className={`qs-row-cell px-2 py-3.5 text-center ${viewCol}`}>
                   <button
                     type="button"
                     aria-label="View question"
@@ -280,7 +349,7 @@ export default function QuestionListView({
                         </Button>
                       )}
                       {onDelete && (
-                        <Button variant="ghost" size="sm" onClick={() => onDelete(q._id)}>
+                        <Button variant="ghost" size="sm" onClick={() => handleDelete(q)}>
                           Delete
                         </Button>
                       )}

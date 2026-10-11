@@ -17,6 +17,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { useUser } from "@/components/providers/UserProvider";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
@@ -80,6 +81,7 @@ function StatPill({ label, value }: { label: string; value: string }) {
 export default function SettingsPage() {
   const router = useRouter();
   const { user, loading, updateUser, logout } = useUser();
+  const confirm = useConfirm();
   const { theme, setTheme } = useTheme();
   const profile = user ? normalizeUser(user) : null;
   const [dailyMinutes, setDailyMinutes] = useState(profile?.dailyStudyMinutes ?? 120);
@@ -164,11 +166,14 @@ export default function SettingsPage() {
   };
 
   const handleLogout = async () => {
-    if (
-      isDirty &&
-      !window.confirm("You have unsaved changes. Sign out without saving?")
-    ) {
-      return;
+    if (isDirty) {
+      const ok = await confirm({
+        title: "Unsaved changes",
+        message: "You have unsaved changes. Sign out without saving?",
+        confirmLabel: "Sign out",
+        variant: "default",
+      });
+      if (!ok) return;
     }
     await logout();
     router.push("/login");

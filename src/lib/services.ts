@@ -528,6 +528,45 @@ export async function deleteGroupData(groupId: string) {
   ]);
 }
 
+/** Removes a track and its questions, topics, tasks, and related progress. */
+export async function deleteSubjectData(subjectId: string) {
+  const sid = new mongoose.Types.ObjectId(subjectId);
+  const [questionIds, topicIds] = await Promise.all([
+    PracticeQuestion.find({ subjectId: sid }).distinct("_id"),
+    Topic.find({ subjectId: sid }).distinct("_id"),
+  ]);
+
+  await PracticeQuestion.deleteMany({
+    $or: [
+      { subjectId: sid },
+      ...(questionIds.length > 0
+        ? [{ sourceGroupQuestionId: { $in: questionIds }, scope: "personal" as const }]
+        : []),
+    ],
+  });
+
+  await Promise.all([
+    questionIds.length > 0
+      ? QuestionProgress.deleteMany({ questionId: { $in: questionIds } })
+      : Promise.resolve(),
+    topicIds.length > 0
+      ? TopicProgress.deleteMany({ topicId: { $in: topicIds } })
+      : Promise.resolve(),
+    Topic.deleteMany({ subjectId: sid }),
+    PrepTask.deleteMany({
+      $or: [
+        { subjectId: sid },
+        ...(questionIds.length > 0 ? [{ questionId: { $in: questionIds } }] : []),
+      ],
+    }),
+    MockInterview.deleteMany({ subjectId: sid }),
+    MockInterviewSession.deleteMany({ "questions.subjectId": sid }),
+    StudySession.deleteMany({ subjectId: sid }),
+    PreparationPlan.deleteMany({ subjectId: sid }),
+    Subject.deleteOne({ _id: sid }),
+  ]);
+}
+
 export async function clearActiveGroupForMembers(groupId: string) {
   await User.updateMany(
     { activeGroupId: new mongoose.Types.ObjectId(groupId) },
@@ -610,15 +649,18 @@ export async function listGroupPracticeQuestionsForUser(groupId: string, userId:
 
   const subjectMap = new Map(subjects.map((s) => [String(s._id), s]));
   const progressMap = new Map(progress.map((p) => [String(p.questionId), p]));
+  const activeSubjectIds = new Set(subjectMap.keys());
 
-  return questions.map((q) => {
+  return questions
+    .filter((q) => activeSubjectIds.has(String(q.subjectId)))
+    .map((q) => {
     const base = serializeDoc(q);
     const subject = subjectMap.get(String(q.subjectId));
     const p = progressMap.get(String(q._id));
-    const practiceDate = (q.practiceDate ?? q.createdAt).toISOString();
+    const practiceDate = q.practiceDate?.toISOString();
     return {
       ...base,
-      practiceDate,
+      ...(practiceDate ? { practiceDate } : {}),
       subjectName: subject?.name ?? "",
       trackLabel: subject
         ? formatSubjectTrack({
@@ -669,7 +711,7 @@ function mapTodayQuestion(
     subjectName: subject?.name ?? "",
     trackLabel,
     status,
-    practiceDate: (q.practiceDate ?? q.createdAt).toISOString(),
+    practiceDate: q.practiceDate?.toISOString(),
     link: q.link,
   };
 }
@@ -681,19 +723,14 @@ export async function getTodayQuestionsForUser(
   const range = questionDatePeriodRange("today");
   if (!range) return { group: [], personal: [] };
 
-  const dateFilter = {
-    $or: [
-      { practiceDate: { $gte: range.start, $lt: range.end } },
-      { practiceDate: { $exists: false }, createdAt: { $gte: range.start, $lt: range.end } },
-    ],
-  };
+  const dateFilter = { practiceDate: { $gte: range.start, $lt: range.end } };
 
   const [groupQuestions, personalQuestions, subjects] = await Promise.all([
     PracticeQuestion.find({ groupId, scope: "group", ...dateFilter })
-      .sort({ practiceDate: 1, createdAt: 1 })
+      .sort({ practiceDate: -1, createdAt: -1 })
       .lean(),
     PracticeQuestion.find({ userId, groupId, scope: "personal", ...dateFilter })
-      .sort({ practiceDate: 1, createdAt: 1 })
+      .sort({ practiceDate: -1, createdAt: -1 })
       .lean(),
     Subject.find({
       $or: [
@@ -719,12 +756,17 @@ export async function getTodayQuestionsForUser(
     ])
   );
   const progressMap = new Map(progress.map((p) => [String(p.questionId), p]));
+  const activeSubjectIds = new Set(subjectMap.keys());
 
   return {
-    group: groupQuestions.map((q) => mapTodayQuestion({ ...q, scope: "group" }, subjectMap, progressMap)),
-    personal: personalQuestions.map((q) =>
-      mapTodayQuestion({ ...q, scope: "personal" }, subjectMap, progressMap)
-    ),
+    group: groupQuestions
+      .filter((q) => activeSubjectIds.has(String(q.subjectId)))
+      .map((q) => mapTodayQuestion({ ...q, scope: "group" }, subjectMap, progressMap)),
+    personal: personalQuestions
+      .filter((q) => activeSubjectIds.has(String(q.subjectId)))
+      .map((q) =>
+        mapTodayQuestion({ ...q, scope: "personal" }, subjectMap, progressMap)
+      ),
   };
 }
 

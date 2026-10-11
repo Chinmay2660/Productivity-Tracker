@@ -1,19 +1,35 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo, memo } from "react";
+import { useEffect, useState, useCallback, memo } from "react";
 import { useUser } from "@/components/providers/UserProvider";
 import { apiGet, apiPost, apiPatch, apiDelete, getErrorMessage } from "@/lib/api";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
+import TablePagination from "@/components/ui/TablePagination";
 import MotivationBanner from "@/components/dashboard/MotivationBanner";
 import TaskRow, { type TaskWithNames } from "@/components/tasks/TaskRow";
 import { ErrorState, EmptyState, TasksPageSkeleton } from "@/components/ui/StateViews";
+import { TABLE_PAGE_SIZE } from "@/lib/utils";
 import toast from "react-hot-toast";
+
+type PagedTasks = {
+  items: TaskWithNames[];
+  total: number;
+  page: number;
+  limit: number;
+  activeTotal: number;
+  completedTotal: number;
+};
 
 export default function TasksPage() {
   const { user } = useUser();
-  const [tasks, setTasks] = useState<TaskWithNames[]>([]);
-  const [initialLoad, setInitialLoad] = useState(true);
+  const [pendingTasks, setPendingTasks] = useState<TaskWithNames[]>([]);
+  const [completedTasks, setCompletedTasks] = useState<TaskWithNames[]>([]);
+  const [pendingTotal, setPendingTotal] = useState(0);
+  const [completedTotal, setCompletedTotal] = useState(0);
+  const [pendingPage, setPendingPage] = useState(1);
+  const [completedPage, setCompletedPage] = useState(1);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -24,31 +40,37 @@ export default function TasksPage() {
 
   const activeGroupId = user?.activeGroupId;
 
-  const fetchTasks = useCallback(async () => {
-    if (!activeGroupId) return [];
-    return apiGet<TaskWithNames[]>(`/api/tasks?groupId=${activeGroupId}`);
-  }, [activeGroupId]);
+  const loadTasks = useCallback(async () => {
+    if (!activeGroupId) return;
+    setLoading(true);
+    try {
+      const [active, completed] = await Promise.all([
+        apiGet<PagedTasks>(
+          `/api/tasks?groupId=${activeGroupId}&bucket=active&page=${pendingPage}&limit=${TABLE_PAGE_SIZE}`
+        ),
+        apiGet<PagedTasks>(
+          `/api/tasks?groupId=${activeGroupId}&bucket=completed&page=${completedPage}&limit=${TABLE_PAGE_SIZE}`
+        ),
+      ]);
+      setPendingTasks(active.items);
+      setPendingTotal(active.activeTotal);
+      setCompletedTasks(completed.items);
+      setCompletedTotal(completed.completedTotal);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load tasks");
+    } finally {
+      setLoading(false);
+    }
+  }, [activeGroupId, pendingPage, completedPage]);
 
   useEffect(() => {
-    let cancelled = false;
-    setInitialLoad(true);
-    setError("");
-    fetchTasks()
-      .then((data) => {
-        if (!cancelled) setTasks(data);
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load tasks");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setInitialLoad(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [fetchTasks]);
+    if (!activeGroupId) {
+      setLoading(false);
+      return;
+    }
+    loadTasks();
+  }, [activeGroupId, loadTasks]);
 
   const setUpdating = useCallback((id: string, active: boolean) => {
     setUpdatingIds((prev) => {
@@ -72,15 +94,16 @@ export default function TasksPage() {
     if (!newTitle.trim() || !user) return;
     setCreating(true);
     try {
-      const created = await apiPost<TaskWithNames>("/api/tasks", {
+      await apiPost<TaskWithNames>("/api/tasks", {
         groupId: user.activeGroupId,
         title: newTitle,
         priority: newPriority,
       });
-      setTasks((prev) => [...prev, created]);
       toast.success("Task created");
       setShowModal(false);
       setNewTitle("");
+      if (pendingPage !== 1) setPendingPage(1);
+      else await loadTasks();
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to create task"));
     } finally {
@@ -92,80 +115,53 @@ export default function TasksPage() {
     async (taskId: string) => {
       if (updatingIds.has(taskId) || deletingIds.has(taskId)) return;
 
-      let previousStatus: TaskWithNames["status"] | undefined;
-      setUpdating(taskId, true);
-      setTasks((prev) => {
-        const task = prev.find((t) => t._id === taskId);
-        if (!task) return prev;
-        previousStatus = task.status;
-        const nextStatus = task.status === "completed" ? "pending" : "completed";
-        return prev.map((t) => (t._id === taskId ? { ...t, status: nextStatus } : t));
-      });
+      const task =
+        pendingTasks.find((t) => t._id === taskId) ??
+        completedTasks.find((t) => t._id === taskId);
+      if (!task) return;
 
-      if (!previousStatus) {
-        setUpdating(taskId, false);
-        return;
-      }
-
+      const previousStatus = task.status;
       const nextStatus = previousStatus === "completed" ? "pending" : "completed";
+
+      setUpdating(taskId, true);
       try {
         await apiPatch(`/api/tasks/${taskId}`, { status: nextStatus });
+        await loadTasks();
       } catch (err) {
-        setTasks((prev) =>
-          prev.map((t) => (t._id === taskId ? { ...t, status: previousStatus! } : t))
-        );
         toast.error(getErrorMessage(err, "Failed to update task"));
       } finally {
         setUpdating(taskId, false);
       }
     },
-    [updatingIds, deletingIds, setUpdating]
+    [updatingIds, deletingIds, pendingTasks, completedTasks, loadTasks, setUpdating]
   );
 
   const deleteTask = useCallback(
     async (taskId: string) => {
       if (updatingIds.has(taskId) || deletingIds.has(taskId)) return;
 
-      let removed: TaskWithNames | undefined;
       setDeleting(taskId, true);
-      setTasks((prev) => {
-        removed = prev.find((t) => t._id === taskId);
-        return prev.filter((t) => t._id !== taskId);
-      });
-
-      if (!removed) {
-        setDeleting(taskId, false);
-        return;
-      }
-
       try {
         await apiDelete(`/api/tasks/${taskId}`);
         toast.success("Task deleted");
+        await loadTasks();
       } catch (err) {
-        setTasks((prev) => [...prev, removed!]);
         toast.error(getErrorMessage(err, "Failed to delete task"));
       } finally {
         setDeleting(taskId, false);
       }
     },
-    [updatingIds, deletingIds, setDeleting]
+    [updatingIds, deletingIds, loadTasks, setDeleting]
   );
 
-  const pending = useMemo(
-    () => tasks.filter((t) => t.status !== "completed"),
-    [tasks]
-  );
-  const completed = useMemo(
-    () => tasks.filter((t) => t.status === "completed"),
-    [tasks]
-  );
+  const totalTasks = pendingTotal + completedTotal;
 
-  if (initialLoad) {
+  if (loading && totalTasks === 0 && pendingTasks.length === 0 && completedTasks.length === 0) {
     return <TasksPageSkeleton />;
   }
 
-  if (error && tasks.length === 0) {
-    return <ErrorState message={error} onRetry={() => window.location.reload()} />;
+  if (error && totalTasks === 0) {
+    return <ErrorState message={error} onRetry={() => loadTasks()} />;
   }
 
   return (
@@ -174,7 +170,7 @@ export default function TasksPage() {
         <div>
           <h1 className="text-2xl font-bold text-[var(--foreground)]">Tasks</h1>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            {`${pending.length} pending · ${completed.length} completed`}
+            {`${pendingTotal} pending · ${completedTotal} completed`}
           </p>
         </div>
         <Button size="sm" onClick={() => setShowModal(true)}>
@@ -184,7 +180,7 @@ export default function TasksPage() {
 
       <MotivationBanner />
 
-      {tasks.length === 0 ? (
+      {totalTasks === 0 ? (
         <EmptyState
           title="No tasks yet"
           description="Add tasks to track what needs to be done."
@@ -192,20 +188,28 @@ export default function TasksPage() {
         />
       ) : (
         <div className="space-y-4">
-          {pending.length > 0 && (
+          {pendingTotal > 0 && (
             <TaskSection
               title="To Do"
-              tasks={pending}
+              tasks={pendingTasks}
+              total={pendingTotal}
+              page={pendingPage}
+              loading={loading}
+              onPageChange={setPendingPage}
               updatingIds={updatingIds}
               deletingIds={deletingIds}
               onToggle={toggleTask}
               onDelete={deleteTask}
             />
           )}
-          {completed.length > 0 && (
+          {completedTotal > 0 && (
             <TaskSection
               title="Completed"
-              tasks={completed}
+              tasks={completedTasks}
+              total={completedTotal}
+              page={completedPage}
+              loading={loading}
+              onPageChange={setCompletedPage}
               updatingIds={updatingIds}
               deletingIds={deletingIds}
               onToggle={toggleTask}
@@ -247,6 +251,10 @@ export default function TasksPage() {
 const TaskSection = memo(function TaskSection({
   title,
   tasks,
+  total,
+  page,
+  loading,
+  onPageChange,
   updatingIds,
   deletingIds,
   onToggle,
@@ -254,6 +262,10 @@ const TaskSection = memo(function TaskSection({
 }: {
   title: string;
   tasks: TaskWithNames[];
+  total: number;
+  page: number;
+  loading?: boolean;
+  onPageChange: (page: number) => void;
   updatingIds: Set<string>;
   deletingIds: Set<string>;
   onToggle: (taskId: string) => void;
@@ -262,7 +274,9 @@ const TaskSection = memo(function TaskSection({
   return (
     <div>
       <h2 className="mb-2 text-sm font-semibold text-[var(--muted)]">{title}</h2>
-      <div className="divide-y divide-[color-mix(in_srgb,var(--border)_60%,transparent)]">
+      <div
+        className={loading ? "divide-y divide-[color-mix(in_srgb,var(--border)_60%,transparent)] opacity-60" : "divide-y divide-[color-mix(in_srgb,var(--border)_60%,transparent)]"}
+      >
         {tasks.map((t) => (
           <TaskRow
             key={t._id}
@@ -273,6 +287,9 @@ const TaskSection = memo(function TaskSection({
             onDelete={onDelete}
           />
         ))}
+      </div>
+      <div className="mt-3">
+        <TablePagination page={page} total={total} loading={loading} onPageChange={onPageChange} />
       </div>
     </div>
   );

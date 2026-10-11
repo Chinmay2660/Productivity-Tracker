@@ -1,11 +1,24 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Card, { CardHeader } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Chip from "@/components/ui/Chip";
+import TablePagination from "@/components/ui/TablePagination";
 import QuestionListView from "@/components/questions/QuestionListView";
 import type { QuestionPointBurst } from "@/lib/question-points-burst";
+import QuestionTableSearch from "@/components/questions/QuestionTableSearch";
+import {
+  compareQuestions,
+  DEFAULT_QUESTION_TABLE_SORT,
+  questionMatchesSearch,
+  sliceTablePage,
+  TABLE_PAGE_SIZE,
+  toggleQuestionSort,
+  type QuestionSortDir,
+  type QuestionSortField,
+} from "@/lib/utils";
 import type { QuestionStatus, TodayQuestion } from "@/types";
 
 function QuestionSection({
@@ -15,6 +28,7 @@ function QuestionSection({
   emptyMessage,
   onStatusChange,
   pointBurst,
+  searchInputId,
 }: {
   title: string;
   subtitle: string;
@@ -22,7 +36,53 @@ function QuestionSection({
   emptyMessage: string;
   onStatusChange: (id: string, status: QuestionStatus) => void;
   pointBurst?: QuestionPointBurst | null;
+  searchInputId: string;
 }) {
+  const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState<QuestionSortField>(DEFAULT_QUESTION_TABLE_SORT.sortBy);
+  const [sortDir, setSortDir] = useState<QuestionSortDir>(DEFAULT_QUESTION_TABLE_SORT.sortDir);
+  const [searchInput, setSearchInput] = useState("");
+
+  const filtered = useMemo(() => {
+    if (!searchInput.trim()) return questions;
+    return questions.filter((q) => questionMatchesSearch(q, searchInput));
+  }, [questions, searchInput]);
+
+  const sorted = useMemo(
+    () =>
+      [...filtered].sort((a, b) =>
+        compareQuestions(
+          { ...a, trackLabel: a.trackLabel, subjectName: a.subjectName },
+          { ...b, trackLabel: b.trackLabel, subjectName: b.subjectName },
+          sortBy,
+          sortDir
+        )
+      ),
+    [filtered, sortBy, sortDir]
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchInput]);
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / TABLE_PAGE_SIZE));
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const pageItems = useMemo(
+    () => sliceTablePage(sorted, page, TABLE_PAGE_SIZE),
+    [sorted, page]
+  );
+
+  const handleSort = (field: QuestionSortField) => {
+    const next = toggleQuestionSort(field, sortBy, sortDir);
+    setSortBy(next.sortBy);
+    setSortDir(next.sortDir);
+    setPage(1);
+  };
+
   if (questions.length === 0) {
     return (
       <div>
@@ -44,11 +104,29 @@ function QuestionSection({
         </div>
         <p className="mt-0.5 text-xs text-[var(--muted)]">{subtitle}</p>
       </div>
-      <QuestionListView
-        questions={questions}
-        onStatusChange={onStatusChange}
-        pointBurst={pointBurst}
-      />
+      <div className="space-y-3">
+        <QuestionTableSearch
+          value={searchInput}
+          onChange={setSearchInput}
+          inputId={searchInputId}
+          className="max-w-md"
+        />
+        {filtered.length === 0 ? (
+          <p className="text-sm text-[var(--muted)]">No questions match your search.</p>
+        ) : (
+          <>
+            <QuestionListView
+              questions={pageItems}
+              onStatusChange={onStatusChange}
+              pointBurst={pointBurst}
+              sortBy={sortBy}
+              sortDir={sortDir}
+              onSort={handleSort}
+            />
+            <TablePagination page={page} total={sorted.length} onPageChange={setPage} />
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -83,26 +161,36 @@ export default function TodayPlanCard({
       />
       {total === 0 ? (
         <p className="text-sm text-[var(--muted)]">
-          Add group or personal questions with today&apos;s practice date to see them here.
+          Add group or personal questions with today&apos;s practice date to see them here. Use{" "}
+          <Link href="/questions" className="text-brand hover:underline">
+            Questions → Today
+          </Link>{" "}
+          or set a practice date on unscheduled items.
         </p>
       ) : (
         <div className="space-y-6">
-          <QuestionSection
-            title="Group"
-            subtitle="Shared with everyone — each member tracks their own progress"
-            questions={todayQuestions.group}
-            emptyMessage="No group questions for today."
-            onStatusChange={onStatusChange}
-            pointBurst={pointBurst}
-          />
-          <QuestionSection
-            title="Personal"
-            subtitle="Only you — your private practice questions"
-            questions={todayQuestions.personal}
-            emptyMessage="No personal questions for today."
-            onStatusChange={onStatusChange}
-            pointBurst={pointBurst}
-          />
+          {groupCount > 0 && (
+            <QuestionSection
+              title="Group"
+              subtitle="Shared with everyone — each member tracks their own progress"
+              questions={todayQuestions.group}
+              emptyMessage="No group questions for today."
+              onStatusChange={onStatusChange}
+              pointBurst={pointBurst}
+              searchInputId="today-group-questions-search"
+            />
+          )}
+          {personalCount > 0 && (
+            <QuestionSection
+              title="Personal"
+              subtitle="Only you — your private practice questions"
+              questions={todayQuestions.personal}
+              emptyMessage="No personal questions for today."
+              onStatusChange={onStatusChange}
+              pointBurst={pointBurst}
+              searchInputId="today-personal-questions-search"
+            />
+          )}
         </div>
       )}
     </Card>

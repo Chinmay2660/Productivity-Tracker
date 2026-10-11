@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useUser } from "@/components/providers/UserProvider";
@@ -18,16 +18,28 @@ import Modal from "@/components/ui/Modal";
 import { GroupDetailSkeleton, ErrorState } from "@/components/ui/StateViews";
 import InviteCodeBlock from "@/components/groups/InviteCodeBlock";
 import GroupGamificationPanel from "@/components/groups/GroupGamificationPanel";
+import { useGroupHeaderActions } from "@/components/groups/GroupShell";
 import QuestionListView from "@/components/questions/QuestionListView";
+import QuestionTableSearch from "@/components/questions/QuestionTableSearch";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
+import TablePagination from "@/components/ui/TablePagination";
 import {
   formatSubjectTrack,
   isGroupFull,
   JOIN_CODE_TTL_MINUTES,
   MAX_GROUP_MEMBERS,
   normalizeQuestionStatus,
+  sliceTablePage,
+  GROUP_QUESTIONS_PAGE_SIZE,
+  TABLE_PAGE_SIZE,
+  DEFAULT_QUESTION_TABLE_SORT,
+  toggleQuestionSort,
   toDateInputValue,
+  type QuestionSortDir,
+  type QuestionSortField,
 } from "@/lib/utils";
 import toast from "react-hot-toast";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
 import {
   triggerQuestionPointsBurst,
   type QuestionPointBurst,
@@ -50,7 +62,13 @@ type GroupDetail = Group & {
   topicCount: number;
   countdown: { days: number; hours: number; interviewDate: string };
   subjects?: Subject[];
-  groupQuestions?: GroupQuestion[];
+};
+
+type PagedGroupQuestions = {
+  items: GroupQuestion[];
+  total: number;
+  page: number;
+  limit: number;
 };
 
 function mergeGroupMembers(prev: GroupDetail, updated: Group): GroupDetail {
@@ -75,10 +93,21 @@ export default function GroupDetailPage() {
   const router = useRouter();
   const groupId = params.id as string;
   const { user, refreshUser } = useUser();
+  const confirm = useConfirm();
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [groupQuestions, setGroupQuestions] = useState<GroupQuestion[]>([]);
+  const [questionTotal, setQuestionTotal] = useState(0);
+  const [questionPage, setQuestionPage] = useState(1);
+  const [questionsLoading, setQuestionsLoading] = useState(false);
+  const [questionSortBy, setQuestionSortBy] = useState<QuestionSortField>(
+    DEFAULT_QUESTION_TABLE_SORT.sortBy
+  );
+  const [questionSortDir, setQuestionSortDir] = useState<QuestionSortDir>(
+    DEFAULT_QUESTION_TABLE_SORT.sortDir
+  );
+  const [memberPage, setMemberPage] = useState(1);
   const [pointBurst, setPointBurst] = useState<QuestionPointBurst | null>(null);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [showQuestionModal, setShowQuestionModal] = useState(false);
@@ -96,18 +125,18 @@ export default function GroupDetailPage() {
   const [transferring, setTransferring] = useState(false);
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
   const [updatingRoleMemberId, setUpdatingRoleMemberId] = useState<string | null>(null);
+  const [questionSearchInput, setQuestionSearchInput] = useState("");
+  const debouncedQuestionSearch = useDebouncedValue(questionSearchInput, 300);
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     const silent = opts?.silent ?? false;
     if (!silent) setLoading(true);
     try {
       const data = await apiGet<GroupDetail>(
-        `/api/groups/${groupId}?include=questions,subjects`
+        `/api/groups/${groupId}?include=subjects`
       );
       const subjectData = data.subjects ?? [];
-      const questionData = data.groupQuestions ?? [];
       setGroup(data);
-      setGroupQuestions(questionData);
       setSubjects(subjectData);
       setNewSubjectId((current) =>
         current || subjectData.length === 0 ? current : subjectData[0]._id
@@ -121,7 +150,54 @@ export default function GroupDetailPage() {
     }
   }, [groupId]);
 
+  const loadGroupQuestions = useCallback(async () => {
+    setQuestionsLoading(true);
+    try {
+      const searchQ = debouncedQuestionSearch.trim()
+        ? `&search=${encodeURIComponent(debouncedQuestionSearch.trim())}`
+        : "";
+      const data = await apiGet<PagedGroupQuestions>(
+        `/api/practice-questions?groupId=${groupId}&scope=group&period=all&page=${questionPage}&limit=${GROUP_QUESTIONS_PAGE_SIZE}&sortBy=${questionSortBy}&sortDir=${questionSortDir}${searchQ}`
+      );
+      const items = Array.isArray(data) ? data : (data.items ?? []);
+      const total = Array.isArray(data) ? data.length : (data.total ?? items.length);
+      setGroupQuestions(items);
+      setQuestionTotal(total);
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to load group questions"));
+    } finally {
+      setQuestionsLoading(false);
+    }
+  }, [groupId, questionPage, questionSortBy, questionSortDir, debouncedQuestionSearch]);
+
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadGroupQuestions(); }, [loadGroupQuestions]);
+
+  useEffect(() => {
+    setQuestionPage(1);
+  }, [debouncedQuestionSearch]);
+
+  const handleQuestionSort = (field: QuestionSortField) => {
+    const next = toggleQuestionSort(field, questionSortBy, questionSortDir);
+    setQuestionSortBy(next.sortBy);
+    setQuestionSortDir(next.sortDir);
+    setQuestionPage(1);
+  };
+
+  const membersByJoinDate = useMemo(() => {
+    if (!group) return [];
+    const joinedAt = new Map(
+      group.members.map((m) => [String(m.userId), new Date(m.joinedAt).getTime()])
+    );
+    return [...group.memberStats].sort(
+      (a, b) => (joinedAt.get(b.userId) ?? 0) - (joinedAt.get(a.userId) ?? 0)
+    );
+  }, [group]);
+
+  const memberPageItems = useMemo(
+    () => sliceTablePage(membersByJoinDate, memberPage, TABLE_PAGE_SIZE),
+    [membersByJoinDate, memberPage]
+  );
 
   const updateQuestionStatus = async (id: string, status: QuestionStatus) => {
     const normalized = normalizeQuestionStatus(status);
@@ -179,6 +255,8 @@ export default function GroupDetailPage() {
       setNewQuestionTitle("");
       setNewQuestionDescription("");
       setPracticeDate(toDateInputValue());
+      if (questionPage !== 1) setQuestionPage(1);
+      else loadGroupQuestions();
       load({ silent: true });
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to add question"));
@@ -211,14 +289,29 @@ export default function GroupDetailPage() {
   ) as GroupRole | undefined;
   const isGroupAdmin = isGroupAdminRole(myRole);
   const canEditGroup = canManageGroup(myRole);
+  const setHeaderActions = useGroupHeaderActions();
 
-  const openEditModal = () => {
+  const openEditModal = useCallback(() => {
     if (!group) return;
     setEditName(group.name);
     setEditDescription(group.description ?? "");
     setTransferTargetId("");
     setShowEditModal(true);
-  };
+  }, [group]);
+
+  useEffect(() => {
+    if (!setHeaderActions) return;
+    if (canEditGroup) {
+      setHeaderActions(
+        <Button variant="outline" size="sm" onClick={openEditModal}>
+          Edit Group
+        </Button>
+      );
+    } else {
+      setHeaderActions(null);
+    }
+    return () => setHeaderActions(null);
+  }, [canEditGroup, setHeaderActions, openEditModal]);
 
   const saveGroup = async () => {
     if (!editName.trim()) return;
@@ -317,13 +410,63 @@ export default function GroupDetailPage() {
 
   return (
     <div className="space-y-6">
-      {canEditGroup && (
-        <div className="flex flex-wrap justify-end gap-2">
-          <Button variant="outline" size="sm" onClick={openEditModal}>
-            Edit Group
-          </Button>
+      <Card>
+        <CardHeader
+          title="Group Questions"
+          subtitle={
+            questionTotal > 0
+              ? `${questionTotal} shared question${questionTotal === 1 ? "" : "s"} — each member tracks their own progress`
+              : "Shared with everyone — each member tracks their own progress"
+          }
+          action={
+            <div className="flex gap-2">
+              <Link href="/questions">
+                <Button variant="outline" size="sm">View All</Button>
+              </Link>
+              {canEditGroup && (
+                <Button size="sm" onClick={() => setShowQuestionModal(true)} disabled={subjects.length === 0}>
+                  Add Question
+                </Button>
+              )}
+            </div>
+          }
+        />
+        <div className="space-y-3">
+          <QuestionTableSearch
+            value={questionSearchInput}
+            onChange={setQuestionSearchInput}
+            inputId="group-questions-search"
+            className="max-w-md"
+          />
+          {questionTotal === 0 && !questionsLoading ? (
+            <p className="text-sm text-[var(--muted)]">
+              {debouncedQuestionSearch.trim()
+                ? "No group questions match your search."
+                : "No group questions yet. Add questions everyone should practice together."}
+            </p>
+          ) : (
+            <>
+              <QuestionListView
+                pointBurst={pointBurst}
+                questions={groupQuestions.map((q) => ({ ...q, scope: "group" as const }))}
+                onStatusChange={updateQuestionStatus}
+                sortBy={questionSortBy}
+                sortDir={questionSortDir}
+                onSort={handleQuestionSort}
+                loading={questionsLoading}
+                localSearch={questionSearchInput}
+              />
+              <TablePagination
+                page={questionPage}
+                total={questionTotal}
+                pageSize={GROUP_QUESTIONS_PAGE_SIZE}
+                loading={questionsLoading}
+                onPageChange={setQuestionPage}
+              />
+            </>
+          )}
         </div>
-      )}
+      </Card>
 
       {group.gamification && <GroupGamificationPanel gamification={group.gamification} />}
 
@@ -348,7 +491,7 @@ export default function GroupDetailPage() {
               </tr>
             </thead>
             <tbody>
-              {group.memberStats.map((m) => {
+              {memberPageItems.map((m) => {
                 const points =
                   group.gamification?.leaderboard.find((g) => g.userId === m.userId)?.totalPoints ?? 0;
                 const isMe = m.userId === user?._id;
@@ -396,7 +539,24 @@ export default function GroupDetailPage() {
                             variant="ghost"
                             size="sm"
                             disabled={removingMemberId === m.userId}
-                            onClick={() => removeMember(m.userId)}
+                            onClick={async () => {
+                              const ok = await confirm(
+                                isMe
+                                  ? {
+                                      title: "Leave group?",
+                                      message:
+                                        "Leave this group? You can rejoin with an invite code.",
+                                      confirmLabel: "Leave",
+                                    }
+                                  : {
+                                      title: "Remove member?",
+                                      message: `Remove ${m.name} from the group?`,
+                                      confirmLabel: "Remove",
+                                    }
+                              );
+                              if (!ok) return;
+                              removeMember(m.userId);
+                            }}
                           >
                             {removingMemberId === m.userId
                               ? "…"
@@ -413,36 +573,13 @@ export default function GroupDetailPage() {
             </tbody>
           </table>
         </div>
-      </Card>
-
-      <Card>
-        <CardHeader
-          title="Group Questions"
-          subtitle="Shared with everyone — each member tracks their own progress"
-          action={
-            <div className="flex gap-2">
-              <Link href="/questions">
-                <Button variant="outline" size="sm">View All</Button>
-              </Link>
-              {canEditGroup && (
-                <Button size="sm" onClick={() => setShowQuestionModal(true)} disabled={subjects.length === 0}>
-                  Add Question
-                </Button>
-              )}
-            </div>
-          }
-        />
-        {groupQuestions.length === 0 ? (
-          <p className="text-sm text-[var(--muted)]">
-            No group questions yet. Add questions everyone should practice together.
-          </p>
-        ) : (
-          <QuestionListView
-            pointBurst={pointBurst}
-            questions={groupQuestions.map((q) => ({ ...q, scope: "group" as const }))}
-            onStatusChange={updateQuestionStatus}
+        <div className="mt-4">
+          <TablePagination
+            page={memberPage}
+            total={group.memberStats.length}
+            onPageChange={setMemberPage}
           />
-        )}
+        </div>
       </Card>
 
       <Card>
@@ -551,7 +688,15 @@ export default function GroupDetailPage() {
                 variant="danger"
                 size="sm"
                 disabled={deletingGroup}
-                onClick={deleteGroup}
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: "Delete group?",
+                    message: `Delete "${group.name}" and all questions, subjects, and progress? This cannot be undone.`,
+                    confirmLabel: "Delete group",
+                  });
+                  if (!ok) return;
+                  deleteGroup();
+                }}
               >
                 {deletingGroup ? "Deleting…" : "Delete group"}
               </Button>

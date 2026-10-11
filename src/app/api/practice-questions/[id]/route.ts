@@ -53,7 +53,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           const award = applyFirstDonePoints(
             prevStatus,
             nextStatus,
-            question.practiceDate ?? question.createdAt,
+            question.practiceDate ?? new Date(),
             existing ?? undefined
           );
           if (award.pointsAwarded != null) progressUpdates.pointsAwarded = award.pointsAwarded;
@@ -136,7 +136,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (body.notes !== undefined) updates.notes = body.notes?.trim() || undefined;
     }
     if (body.topicId !== undefined) updates.topicId = body.topicId || undefined;
-    if (body.practiceDate) updates.practiceDate = parseDateInput(body.practiceDate);
+    if (body.practiceDate === null || body.practiceDate === "") {
+      updates.$unset = { practiceDate: 1 };
+    } else if (body.practiceDate) {
+      updates.practiceDate = parseDateInput(body.practiceDate);
+    }
 
     const updated = await PracticeQuestion.findByIdAndUpdate(id, updates, { new: true }).lean();
     if (!updated) return jsonError("Question not found", 404);
