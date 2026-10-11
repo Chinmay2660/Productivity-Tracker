@@ -59,7 +59,14 @@ async function buildAnalytics(
 
   const [subjects, topics, mocks, group, personalQuestions, groupQuestions, taskStats, studyMinutesAgg] =
     await Promise.all([
-      Subject.find({ groupId }).select("name").lean(),
+      Subject.find({
+        $or: [
+          { groupId, scope: "group", isActive: true },
+          { userId, scope: "personal", isActive: true },
+        ],
+      })
+        .select("name")
+        .lean(),
       Topic.find({ groupId }).select("subjectId status").lean(),
       MockInterview.find({ userId, groupId }).select("date score subjectId").lean(),
       Group.findById(groupId).select("members").lean(),
@@ -113,15 +120,22 @@ async function buildAnalytics(
     questionProgress.map((p) => [String(p.questionId), p])
   );
   const subjectNames = new Map(subjects.map((s) => [String(s._id), s.name]));
+  const activeSubjectIds = new Set(subjectNames.keys());
+  const visiblePersonal = personalQuestions.filter((q) =>
+    activeSubjectIds.has(String(q.subjectId))
+  );
+  const visibleGroup = groupQuestions.filter((q) =>
+    activeSubjectIds.has(String(q.subjectId))
+  );
 
-  const personalWithStatus = personalQuestions.map((q) => ({
+  const personalWithStatus = visiblePersonal.map((q) => ({
     subjectId: q.subjectId,
     status: normalizeQuestionStatus(q.status ?? "not_started"),
     completedAt: q.lastPracticed ?? q.firstCompletedAt,
     practiceDate: q.practiceDate ?? q.createdAt,
   }));
 
-  const groupWithStatus = groupQuestions.map((q) => {
+  const groupWithStatus = visibleGroup.map((q) => {
     const p = progressByQuestion.get(String(q._id));
     const status = normalizeQuestionStatus(p?.status ?? "not_started");
     return {
@@ -135,7 +149,7 @@ async function buildAnalytics(
   const personalDone = personalWithStatus.filter((q) => isQuestionDone(q.status)).length;
   const groupDone = groupWithStatus.filter((q) => isQuestionDone(q.status)).length;
 
-  const groupGamificationInput = groupQuestions.map((q) => {
+  const groupGamificationInput = visibleGroup.map((q) => {
     const p = progressByQuestion.get(String(q._id));
     return {
       _id: String(q._id),
@@ -203,7 +217,7 @@ async function buildAnalytics(
     },
     personal: {
       summary: {
-        totalQuestions: personalQuestions.length,
+        totalQuestions: visiblePersonal.length,
         done: personalDone,
         inProgress: personalWithStatus.filter(
           (q) => normalizeQuestionStatus(q.status) === "in_progress"
@@ -219,7 +233,7 @@ async function buildAnalytics(
     },
     group: {
       summary: {
-        totalQuestions: groupQuestions.length,
+        totalQuestions: visibleGroup.length,
         yourDone: groupDone,
         yourPoints: myGamification.totalPoints,
         yourReadiness: myReadiness,

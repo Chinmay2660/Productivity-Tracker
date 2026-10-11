@@ -39,7 +39,7 @@ import {
   type QuestionSortField,
 } from "@/lib/utils";
 import toast from "react-hot-toast";
-import { confirmDestructive } from "@/lib/confirm-destructive";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
 import {
   triggerQuestionPointsBurst,
   type QuestionPointBurst,
@@ -93,6 +93,7 @@ export default function GroupDetailPage() {
   const router = useRouter();
   const groupId = params.id as string;
   const { user, refreshUser } = useUser();
+  const confirm = useConfirm();
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -538,11 +539,22 @@ export default function GroupDetailPage() {
                             variant="ghost"
                             size="sm"
                             disabled={removingMemberId === m.userId}
-                            onClick={() => {
-                              const msg = isMe
-                                ? "Leave this group? You can rejoin with an invite code."
-                                : `Remove ${m.name} from the group?`;
-                              if (!confirmDestructive(msg)) return;
+                            onClick={async () => {
+                              const ok = await confirm(
+                                isMe
+                                  ? {
+                                      title: "Leave group?",
+                                      message:
+                                        "Leave this group? You can rejoin with an invite code.",
+                                      confirmLabel: "Leave",
+                                    }
+                                  : {
+                                      title: "Remove member?",
+                                      message: `Remove ${m.name} from the group?`,
+                                      confirmLabel: "Remove",
+                                    }
+                              );
+                              if (!ok) return;
                               removeMember(m.userId);
                             }}
                           >
@@ -676,14 +688,13 @@ export default function GroupDetailPage() {
                 variant="danger"
                 size="sm"
                 disabled={deletingGroup}
-                onClick={() => {
-                  if (
-                    !confirmDestructive(
-                      `Delete "${group.name}" and all questions, subjects, and progress? This cannot be undone.`
-                    )
-                  ) {
-                    return;
-                  }
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: "Delete group?",
+                    message: `Delete "${group.name}" and all questions, subjects, and progress? This cannot be undone.`,
+                    confirmLabel: "Delete group",
+                  });
+                  if (!ok) return;
                   deleteGroup();
                 }}
               >

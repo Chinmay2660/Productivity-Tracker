@@ -4,7 +4,7 @@ import { memo } from "react";
 import clsx from "clsx";
 import Checkbox from "@/components/ui/Checkbox";
 import { PriorityBadge, StatusBadge } from "@/components/ui/Badge";
-import { confirmDestructive } from "@/lib/confirm-destructive";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { TASK_STATUS_META } from "@/lib/utils";
 import type { PrepTask } from "@/types";
 
@@ -19,6 +19,7 @@ type TaskRowProps = {
 };
 
 function TaskRow({ task, updating, deleting, onToggle, onDelete }: TaskRowProps) {
+  const confirm = useConfirm();
   const meta = TASK_STATUS_META[task.status];
   const completed = task.status === "completed";
 
@@ -65,14 +66,13 @@ function TaskRow({ task, updating, deleting, onToggle, onDelete }: TaskRowProps)
       </div>
       <button
         type="button"
-        onClick={() => {
-          if (
-            !confirmDestructive(
-              `Delete "${task.title}"? This cannot be undone.`
-            )
-          ) {
-            return;
-          }
+        onClick={async () => {
+          const ok = await confirm({
+            title: "Delete task?",
+            message: `Delete "${task.title}"? This cannot be undone.`,
+            confirmLabel: "Delete",
+          });
+          if (!ok) return;
           onDelete(task._id);
         }}
         disabled={updating || deleting}

@@ -11,10 +11,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     await connectToDatabase();
     const { id } = await params;
     const body = await request.json();
-    const { totalQuestions, name, description, contentUnit, useForMockInterview } = body;
+    const { totalQuestions, name, description, contentUnit, useForMockInterview, isActive } = body;
 
     const subject = await Subject.findById(id);
-    if (!subject || !subject.isActive) return jsonError("Subject not found", 404);
+    if (!subject) return jsonError("Subject not found", 404);
 
     if (subject.scope === "group") {
       if (!subject.groupId) return jsonError("Invalid group subject", 400);
@@ -46,6 +46,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         return jsonError("useForMockInterview only applies to group tracks");
       }
       updates.useForMockInterview = Boolean(useForMockInterview);
+    }
+    if (isActive !== undefined) {
+      updates.isActive = Boolean(isActive);
     }
 
     if (Object.keys(updates).length === 0) return jsonError("No valid fields to update");

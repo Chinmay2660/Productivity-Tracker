@@ -610,8 +610,11 @@ export async function listGroupPracticeQuestionsForUser(groupId: string, userId:
 
   const subjectMap = new Map(subjects.map((s) => [String(s._id), s]));
   const progressMap = new Map(progress.map((p) => [String(p.questionId), p]));
+  const activeSubjectIds = new Set(subjectMap.keys());
 
-  return questions.map((q) => {
+  return questions
+    .filter((q) => activeSubjectIds.has(String(q.subjectId)))
+    .map((q) => {
     const base = serializeDoc(q);
     const subject = subjectMap.get(String(q.subjectId));
     const p = progressMap.get(String(q._id));
@@ -714,12 +717,17 @@ export async function getTodayQuestionsForUser(
     ])
   );
   const progressMap = new Map(progress.map((p) => [String(p.questionId), p]));
+  const activeSubjectIds = new Set(subjectMap.keys());
 
   return {
-    group: groupQuestions.map((q) => mapTodayQuestion({ ...q, scope: "group" }, subjectMap, progressMap)),
-    personal: personalQuestions.map((q) =>
-      mapTodayQuestion({ ...q, scope: "personal" }, subjectMap, progressMap)
-    ),
+    group: groupQuestions
+      .filter((q) => activeSubjectIds.has(String(q.subjectId)))
+      .map((q) => mapTodayQuestion({ ...q, scope: "group" }, subjectMap, progressMap)),
+    personal: personalQuestions
+      .filter((q) => activeSubjectIds.has(String(q.subjectId)))
+      .map((q) =>
+        mapTodayQuestion({ ...q, scope: "personal" }, subjectMap, progressMap)
+      ),
   };
 }
 

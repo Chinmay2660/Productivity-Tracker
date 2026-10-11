@@ -9,7 +9,7 @@ import QuestionPointsBurst from "@/components/questions/QuestionPointsBurst";
 import QuestionScopeChip from "@/components/questions/QuestionScopeChip";
 import QuestionStatusSelect from "@/components/questions/QuestionStatusSelect";
 import type { QuestionPointBurst } from "@/lib/question-points-burst";
-import { confirmDestructive } from "@/lib/confirm-destructive";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
 import {
   DEFAULT_QUESTION_TABLE_SORT,
   formatDate,
@@ -143,19 +143,19 @@ export default function QuestionListView({
   const viewCol = "w-14";
   const actionsCol = "min-w-[9rem]";
   const [preview, setPreview] = useState<QuestionListItem | null>(null);
+  const confirm = useConfirm();
   const tableColSpan =
     6 + (showScope ? 1 : 0) + (showActions ? 1 : 0);
 
-  const handleDelete = (q: QuestionListItem) => {
+  const handleDelete = async (q: QuestionListItem) => {
     if (!onDelete) return;
     const title = splitQuestionFields(q.content).title;
-    if (
-      !confirmDestructive(
-        `Delete "${title}"? This cannot be undone.`
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: "Delete question?",
+      message: `Delete "${title}"? This cannot be undone.`,
+      confirmLabel: "Delete",
+    });
+    if (!ok) return;
     onDelete(q._id);
   };
 

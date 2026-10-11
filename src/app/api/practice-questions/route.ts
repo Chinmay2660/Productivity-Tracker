@@ -111,6 +111,18 @@ export async function GET(request: Request) {
       ],
     }).lean();
 
+    const activeSubjectIds = subjects.map((s) => s._id);
+    if (activeSubjectIds.length === 0) {
+      if (paginate) {
+        return jsonOk({ items: [], total: 0, page, limit });
+      }
+      return jsonOk([]);
+    }
+    questionFilter.$and = [
+      ...(Array.isArray(questionFilter.$and) ? questionFilter.$and : []),
+      { subjectId: { $in: activeSubjectIds } },
+    ];
+
     if (searchTerm) {
       const regex = new RegExp(escapeRegex(searchTerm), "i");
       const matchingSubjectIds = subjects
@@ -260,7 +272,7 @@ export async function POST(request: Request) {
     }
 
     const subject = await Subject.findById(subjectId).lean();
-    if (!subject) return jsonError("Subject not found", 404);
+    if (!subject || !subject.isActive) return jsonError("Subject not found", 404);
     if (scope === "group" && subject.scope !== "group") {
       return jsonError("Group questions must use a group subject");
     }

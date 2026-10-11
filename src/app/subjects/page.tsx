@@ -12,10 +12,12 @@ import ProgressBar from "@/components/ui/ProgressBar";
 import { ConfidenceBadge } from "@/components/ui/Badge";
 import { formatSubjectTrack } from "@/lib/utils";
 import toast from "react-hot-toast";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
 import type { ContentScope, SubjectWithStats } from "@/types";
 
 export default function SubjectsPage() {
   const { user } = useUser();
+  const confirm = useConfirm();
   const [subjects, setSubjects] = useState<SubjectWithStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [initialLoad, setInitialLoad] = useState(true);
@@ -26,7 +28,9 @@ export default function SubjectsPage() {
   const [newName, setNewName] = useState("");
   const [newTotalQuestions, setNewTotalQuestions] = useState("");
   const [useForMockInterview, setUseForMockInterview] = useState(true);
+  const [trackEnabled, setTrackEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!user?.activeGroupId && tab === "group") {
@@ -38,8 +42,8 @@ export default function SubjectsPage() {
     try {
       const url =
         tab === "group"
-          ? `/api/subjects?groupId=${user!.activeGroupId}&scope=group`
-          : `/api/subjects?scope=personal`;
+          ? `/api/subjects?groupId=${user!.activeGroupId}&scope=group&includeInactive=1`
+          : `/api/subjects?scope=personal&includeInactive=1`;
       const data = await apiGet<SubjectWithStats[]>(url);
       setSubjects(data);
     } catch (err) {
@@ -56,6 +60,7 @@ export default function SubjectsPage() {
     setNewName("");
     setNewTotalQuestions("");
     setUseForMockInterview(true);
+    setTrackEnabled(true);
     setEditingSubject(null);
   };
 
@@ -69,6 +74,7 @@ export default function SubjectsPage() {
     setNewName(subject.name);
     setNewTotalQuestions(subject.totalQuestions ? String(subject.totalQuestions) : "");
     setUseForMockInterview(subject.useForMockInterview !== false);
+    setTrackEnabled(subject.isActive !== false);
     setShowModal(true);
   };
 
@@ -100,6 +106,14 @@ export default function SubjectsPage() {
 
   const saveSubject = async () => {
     if (!editingSubject || !newName.trim()) return;
+    if (editingSubject.isActive !== false && !trackEnabled) {
+      const ok = await confirm({
+        title: "Disable track?",
+        message: `Disable "${editingSubject.name}"? Questions on this track will be hidden until you re-enable it.`,
+        confirmLabel: "Disable",
+      });
+      if (!ok) return;
+    }
     const totalQuestions = newTotalQuestions ? Number(newTotalQuestions) : 0;
     if (!Number.isFinite(totalQuestions) || totalQuestions < 0) {
       toast.error("Enter a valid target count");
@@ -110,6 +124,7 @@ export default function SubjectsPage() {
       const updated = await apiPatch<SubjectWithStats>(`/api/subjects/${editingSubject._id}`, {
         name: newName.trim(),
         totalQuestions,
+        isActive: trackEnabled,
         ...(tab === "group" ? { useForMockInterview } : {}),
       });
       setSubjects((prev) =>
@@ -136,6 +151,36 @@ export default function SubjectsPage() {
       setSaving(false);
     }
   };
+
+  const toggleTrackActive = async (subject: SubjectWithStats, nextActive: boolean) => {
+    if (!nextActive) {
+      const ok = await confirm({
+        title: "Disable track?",
+        message: `Disable "${subject.name}"? Questions on this track will be hidden until you re-enable it.`,
+        confirmLabel: "Disable",
+      });
+      if (!ok) return;
+    }
+    setTogglingId(subject._id);
+    try {
+      const updated = await apiPatch<SubjectWithStats>(`/api/subjects/${subject._id}`, {
+        isActive: nextActive,
+      });
+      setSubjects((prev) =>
+        prev.map((s) => (s._id === subject._id ? { ...s, ...updated, isActive: nextActive } : s))
+      );
+      toast.success(nextActive ? "Track enabled" : "Track disabled");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to update track"));
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
+  const sortedSubjects = [...subjects].sort((a, b) => {
+    if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+    return (a.order ?? 0) - (b.order ?? 0);
+  });
 
   if (initialLoad && loading) {
     return <SubjectsPageSkeleton />;
@@ -189,15 +234,22 @@ export default function SubjectsPage() {
         />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
-          {subjects.map((s) => (
-            <Card key={s._id}>
+          {sortedSubjects.map((s) => (
+            <Card key={s._id} className={!s.isActive ? "opacity-75" : undefined}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <h3 className="text-lg font-semibold text-[var(--foreground)]">
                       {formatSubjectTrack(s)}
                     </h3>
-                    <ConfidenceBadge confidence={s.confidence} />
+                    <div className="flex items-center gap-2">
+                      {!s.isActive && (
+                        <Chip variant="muted" className="!px-2 !py-0.5 !text-[10px]">
+                          Disabled
+                        </Chip>
+                      )}
+                      <ConfidenceBadge confidence={s.confidence} />
+                    </div>
                   </div>
                   <ProgressBar value={s.completionPercent} className="mt-3" />
                   <p className="mt-1.5 text-xs text-[var(--muted)]">
@@ -213,9 +265,19 @@ export default function SubjectsPage() {
                     </p>
                   )}
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => openEditModal(s)}>
-                  Edit
-                </Button>
+                <div className="flex shrink-0 flex-col gap-1">
+                  <Button variant="ghost" size="sm" onClick={() => openEditModal(s)}>
+                    Edit
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={togglingId === s._id}
+                    onClick={() => toggleTrackActive(s, !s.isActive)}
+                  >
+                    {togglingId === s._id ? "…" : s.isActive ? "Disable" : "Enable"}
+                  </Button>
+                </div>
               </div>
             </Card>
           ))}
@@ -256,6 +318,21 @@ export default function SubjectsPage() {
               className="mt-1 w-full rounded-lg border border-[var(--input-border)] px-4 py-2.5 text-sm dark:border-[var(--input-border)] dark:bg-[var(--input-bg)]"
             />
           </div>
+          <label className="flex items-start gap-3 rounded-lg border border-[var(--border)] p-3 text-sm">
+            <input
+              type="checkbox"
+              checked={trackEnabled}
+              onChange={(e) => setTrackEnabled(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="font-medium text-[var(--foreground)]">Track enabled</span>
+              <span className="mt-0.5 block text-[var(--muted)]">
+                When disabled, questions on this track are hidden from lists, dashboard, and
+                analytics.
+              </span>
+            </span>
+          </label>
           {tab === "group" && (
             <label className="flex items-start gap-3 rounded-lg border border-[var(--border)] p-3 text-sm">
               <input
@@ -263,6 +340,7 @@ export default function SubjectsPage() {
                 checked={useForMockInterview}
                 onChange={(e) => setUseForMockInterview(e.target.checked)}
                 className="mt-0.5"
+                disabled={!trackEnabled}
               />
               <span>
                 <span className="font-medium text-[var(--foreground)]">Use for mock interviews</span>
