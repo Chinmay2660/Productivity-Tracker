@@ -9,6 +9,7 @@ import {
   resolveQuestionBody,
 } from "@/lib/utils";
 import { applyFirstDonePoints } from "@/lib/question-gamification";
+import { questionProgressFields } from "@/lib/question-progress";
 import {
   serializeDoc,
   isGroupMember,
@@ -42,9 +43,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const nextStatus = body.status ? normalizeQuestionStatus(body.status) : undefined;
     let pointsEarnedNow: number | undefined;
 
-    if (question.scope === "group" && (nextStatus || body.confidence || body.notes !== undefined)) {
+    const hasProgressUpdate =
+      nextStatus !== undefined || body.confidence || body.notes !== undefined;
+
+    if (hasProgressUpdate) {
       const existing = await QuestionProgress.findOne({ userId, questionId: id }).lean();
-      const prevStatus = normalizeQuestionStatus(existing?.status ?? "not_started");
+      const prevStatus = normalizeQuestionStatus(
+        existing?.status ?? question.status ?? "not_started"
+      );
       const progressUpdates: Record<string, unknown> = {};
       if (nextStatus) {
         progressUpdates.status = nextStatus;
@@ -72,27 +78,37 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
       if (progress) {
         const status = normalizeQuestionStatus(progress.status);
-        await syncGroupProgressToPersonal(userId, question, {
-          status,
-          confidence: progress.confidence,
-          lastPracticed: progress.lastPracticed,
-          notes: progress.notes,
-        });
+        if (question.scope === "group") {
+          await syncGroupProgressToPersonal(userId, question, {
+            status,
+            confidence: progress.confidence,
+            lastPracticed: progress.lastPracticed,
+            notes: progress.notes,
+          });
+        } else {
+          await PracticeQuestion.findByIdAndUpdate(id, {
+            status: progress.status,
+            confidence: progress.confidence,
+            lastPracticed: progress.lastPracticed,
+            notes: progress.notes,
+            ...(progress.pointsAwarded != null ? { pointsAwarded: progress.pointsAwarded } : {}),
+            ...(progress.firstCompletedAt
+              ? { firstCompletedAt: progress.firstCompletedAt }
+              : {}),
+          });
+        }
         await syncQuestionTodoTask(userId, question, status);
       }
 
       invalidateGroupInsights(String(question.groupId));
 
+      const progressView = questionProgressFields(progress, question);
+
       if (!canEditContent) {
         return jsonOk({
           ...serializeDoc(question),
-          status: normalizeQuestionStatus(progress?.status ?? "not_started"),
-          confidence: progress?.confidence ?? "weak",
-          lastPracticed: progress?.lastPracticed?.toISOString(),
-          pointsAwarded: progress?.pointsAwarded,
-          firstCompletedAt: progress?.firstCompletedAt?.toISOString(),
+          ...progressView,
           pointsEarnedNow,
-          notes: progress?.notes,
         });
       }
     }
@@ -127,14 +143,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
       updates.subjectId = body.subjectId;
     }
-    if (question.scope === "personal") {
-      if (nextStatus) {
-        updates.status = nextStatus;
-        if (isQuestionStatusPracticed(nextStatus)) updates.lastPracticed = new Date();
-      }
-      if (body.confidence) updates.confidence = body.confidence;
-      if (body.notes !== undefined) updates.notes = body.notes?.trim() || undefined;
-    }
     if (body.topicId !== undefined) updates.topicId = body.topicId || undefined;
     if (body.practiceDate === null || body.practiceDate === "") {
       updates.$unset = { practiceDate: 1 };
@@ -145,27 +153,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const updated = await PracticeQuestion.findByIdAndUpdate(id, updates, { new: true }).lean();
     if (!updated) return jsonError("Question not found", 404);
 
-    if (updated.scope === "personal" && nextStatus) {
-      await syncQuestionTodoTask(userId, updated, nextStatus);
-    }
-
-    if (updated.scope === "group") {
-      const progress = await QuestionProgress.findOne({ userId, questionId: id }).lean();
-      return jsonOk({
-        ...serializeDoc(updated),
-        status: normalizeQuestionStatus(progress?.status ?? "not_started"),
-        confidence: progress?.confidence ?? "weak",
-        lastPracticed: progress?.lastPracticed?.toISOString(),
-        pointsAwarded: progress?.pointsAwarded,
-        firstCompletedAt: progress?.firstCompletedAt?.toISOString(),
-        pointsEarnedNow,
-        notes: progress?.notes,
-      });
-    }
+    const progress = await QuestionProgress.findOne({ userId, questionId: id }).lean();
+    const progressView = questionProgressFields(progress, updated);
 
     return jsonOk({
       ...serializeDoc(updated),
-      status: normalizeQuestionStatus(updated.status ?? "not_started"),
+      ...progressView,
+      pointsEarnedNow,
     });
   } catch (err) {
     if (err instanceof Error && err.message === "Unauthorized") return unauthorized();

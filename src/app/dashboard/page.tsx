@@ -71,13 +71,15 @@ export default function DashboardPage() {
   const updateQuestionStatus = async (id: string, status: QuestionStatus) => {
     const normalized = normalizeQuestionStatus(status);
     let previousStatus: QuestionStatus | undefined;
+    let found = false;
     setData((prev) => {
       if (!prev) return prev;
       const current =
         prev.todayQuestions.group.find((q) => q._id === id) ??
         prev.todayQuestions.personal.find((q) => q._id === id);
       if (!current) return prev;
-      previousStatus = current.status;
+      found = true;
+      previousStatus = normalizeQuestionStatus(current.status ?? "not_started");
       const updateList = (list: typeof prev.todayQuestions.group) =>
         list.map((q) => (q._id === id ? { ...q, status: normalized } : q));
       return {
@@ -88,13 +90,26 @@ export default function DashboardPage() {
         },
       };
     });
-    if (!previousStatus) return;
+    if (!found) return;
 
     try {
-      const updated = await apiPatch<{ pointsEarnedNow?: number }>(
+      const updated = await apiPatch<{ status?: QuestionStatus; pointsEarnedNow?: number }>(
         `/api/practice-questions/${id}`,
         { status: normalized }
       );
+      const savedStatus = normalizeQuestionStatus(updated.status ?? normalized);
+      setData((prev) => {
+        if (!prev) return prev;
+        const updateList = (list: typeof prev.todayQuestions.group) =>
+          list.map((q) => (q._id === id ? { ...q, status: savedStatus } : q));
+        return {
+          ...prev,
+          todayQuestions: {
+            group: updateList(prev.todayQuestions.group),
+            personal: updateList(prev.todayQuestions.personal),
+          },
+        };
+      });
       triggerQuestionPointsBurst(setPointBurst, id, updated.pointsEarnedNow);
       if (normalized === "add_to_todo") {
         toast.success("Added to Tasks");

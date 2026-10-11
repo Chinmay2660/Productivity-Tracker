@@ -27,6 +27,7 @@ import {
   invalidateGroupInsights,
 } from "@/lib/services";
 import mongoose from "mongoose";
+import { questionProgressFields } from "@/lib/question-progress";
 import PracticeQuestion from "@/models/PracticeQuestion";
 import QuestionProgress from "@/models/QuestionProgress";
 import Subject from "@/models/Subject";
@@ -163,41 +164,23 @@ export async function GET(request: Request) {
             contentUnit: subject.contentUnit ?? "questions",
           })
         : "";
-      if (q.scope === "group") {
-        const p = progressMap.get(String(q._id));
-        return {
-          ...base,
-          practiceDate,
-          subjectName: subject?.name ?? "",
-          trackLabel,
-          status: normalizeQuestionStatus(p?.status ?? "not_started"),
-          confidence: p?.confidence ?? "weak",
-          lastPracticed: p?.lastPracticed?.toISOString(),
-          notes: p?.notes,
-        };
-      }
+      const p = progressMap.get(String(q._id));
+      const fields = questionProgressFields(p, q);
       return {
         ...base,
         practiceDate,
         subjectName: subject?.name ?? "",
         trackLabel,
-        status: normalizeQuestionStatus(q.status ?? "not_started"),
-        confidence: q.confidence ?? "weak",
-        lastPracticed: q.lastPracticed?.toISOString(),
-        notes: q.notes,
+        ...fields,
       };
     };
 
-    async function progressForQuestions(
-      questions: { _id: unknown; scope: string }[]
-    ) {
-      const groupIds = questions
-        .filter((q) => q.scope === "group")
-        .map((q) => q._id as mongoose.Types.ObjectId);
-      if (groupIds.length === 0) return new Map();
+    async function progressForQuestions(questions: { _id: unknown }[]) {
+      const ids = questions.map((q) => q._id as mongoose.Types.ObjectId);
+      if (ids.length === 0) return new Map();
       const progressRows = await QuestionProgress.find({
         userId,
-        questionId: { $in: groupIds },
+        questionId: { $in: ids },
       }).lean();
       return new Map(progressRows.map((p) => [String(p.questionId), p]));
     }
@@ -308,8 +291,14 @@ export async function POST(request: Request) {
 
     if (scope === "group") {
       await seedQuestionProgressForMembers(String(question._id), groupId);
-      invalidateGroupInsights(groupId);
+    } else {
+      await QuestionProgress.findOneAndUpdate(
+        { userId, questionId: question._id },
+        { status: "not_started", confidence: "weak" },
+        { upsert: true }
+      );
     }
+    invalidateGroupInsights(groupId);
 
     return jsonOk(serializeDoc(question), 201);
   } catch (err) {

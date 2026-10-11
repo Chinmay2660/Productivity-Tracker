@@ -1,5 +1,6 @@
 import type { QuestionsByDate } from "@/types";
-import { questionPracticeDay } from "@/lib/utils";
+import { isQuestionDone } from "@/lib/analytics-questions";
+import { normalizeQuestionStatus, questionPracticeDay } from "@/lib/utils";
 
 type QuestionRow = { subjectId: unknown; practiceDate?: Date | string; createdAt: Date | string };
 type QuestionRowWithId = QuestionRow & { _id: unknown };
@@ -19,6 +20,7 @@ export function buildQuestionStats(questions: QuestionRow[]) {
   return bySubject;
 }
 
+/** Team-wide metric: question counts only when every member marked done. Prefer buildMemberDoneQuestionStats for per-user UI. */
 export function buildGroupDoneQuestionStats(
   questions: QuestionRowWithId[],
   memberIds: string[],
@@ -47,6 +49,26 @@ export function buildGroupDoneQuestionStats(
     entry.byDate.set(date, (entry.byDate.get(date) ?? 0) + 1);
   }
 
+  return bySubject;
+}
+
+/** Done/revised questions for one member (per track), keyed by subject. */
+export function buildMemberDoneQuestionStats(
+  questions: QuestionRowWithId[],
+  statusByQuestionId: Map<string, string>
+): Map<string, SubjectQuestionStats> {
+  const bySubject = new Map<string, SubjectQuestionStats>();
+  for (const q of questions) {
+    const status = normalizeQuestionStatus(statusByQuestionId.get(String(q._id)) ?? "not_started");
+    if (!isQuestionDone(status)) continue;
+
+    const sid = String(q.subjectId);
+    if (!bySubject.has(sid)) bySubject.set(sid, { count: 0, byDate: new Map() });
+    const entry = bySubject.get(sid)!;
+    entry.count++;
+    const date = questionPracticeDay(q);
+    entry.byDate.set(date, (entry.byDate.get(date) ?? 0) + 1);
+  }
   return bySubject;
 }
 

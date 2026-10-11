@@ -241,18 +241,30 @@ export default function QuestionsPage() {
   const updateStatus = async (id: string, status: QuestionStatus) => {
     const normalized = normalizeQuestionStatus(status);
     let previousStatus: QuestionStatus | undefined;
+    let found = false;
     setQuestions((prev) => {
       const current = prev.find((q) => q._id === id);
       if (!current) return prev;
-      previousStatus = current.status;
+      found = true;
+      previousStatus = normalizeQuestionStatus(current.status ?? "not_started");
       return prev.map((q) => (q._id === id ? { ...q, status: normalized } : q));
     });
-    if (!previousStatus) return;
+    if (!found) return;
 
     try {
-      const updated = await apiPatch<{ pointsEarnedNow?: number }>(
+      const updated = await apiPatch<QuestionWithSubject & { pointsEarnedNow?: number }>(
         `/api/practice-questions/${id}`,
         { status: normalized }
+      );
+      setQuestions((prev) =>
+        prev.map((q) =>
+          q._id === id
+            ? {
+                ...q,
+                status: normalizeQuestionStatus(updated.status ?? normalized),
+              }
+            : q
+        )
       );
       triggerQuestionPointsBurst(setPointBurst, id, updated.pointsEarnedNow);
       if (normalized === "add_to_todo") {
