@@ -4,6 +4,7 @@ import { memo } from "react";
 import clsx from "clsx";
 import Checkbox from "@/components/ui/Checkbox";
 import { PriorityBadge, StatusBadge } from "@/components/ui/Badge";
+import { confirmDestructive } from "@/lib/confirm-destructive";
 import { TASK_STATUS_META } from "@/lib/utils";
 import type { PrepTask } from "@/types";
 
@@ -64,7 +65,16 @@ function TaskRow({ task, updating, deleting, onToggle, onDelete }: TaskRowProps)
       </div>
       <button
         type="button"
-        onClick={() => onDelete(task._id)}
+        onClick={() => {
+          if (
+            !confirmDestructive(
+              `Delete "${task.title}"? This cannot be undone.`
+            )
+          ) {
+            return;
+          }
+          onDelete(task._id);
+        }}
         disabled={updating || deleting}
         className="shrink-0 rounded-md px-2 py-1 text-xs text-[var(--muted)] opacity-0 transition-opacity hover:bg-[var(--surface-muted)] hover:text-danger group-hover:opacity-100 disabled:cursor-wait disabled:opacity-50"
       >

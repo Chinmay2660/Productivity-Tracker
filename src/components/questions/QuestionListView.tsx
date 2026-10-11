@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import clsx from "clsx";
 import { ChevronDown, ChevronUp, ExternalLink, Eye } from "lucide-react";
 import Button from "@/components/ui/Button";
@@ -9,9 +9,11 @@ import QuestionPointsBurst from "@/components/questions/QuestionPointsBurst";
 import QuestionScopeChip from "@/components/questions/QuestionScopeChip";
 import QuestionStatusSelect from "@/components/questions/QuestionStatusSelect";
 import type { QuestionPointBurst } from "@/lib/question-points-burst";
+import { confirmDestructive } from "@/lib/confirm-destructive";
 import {
   DEFAULT_QUESTION_TABLE_SORT,
   formatDate,
+  questionMatchesSearch,
   questionRowVars,
   splitQuestionFields,
   type QuestionSortDir,
@@ -108,6 +110,7 @@ export default function QuestionListView({
   onSort,
   loading = false,
   pointBurst = null,
+  localSearch = "",
 }: {
   questions: QuestionListItem[];
   onStatusChange: (id: string, status: QuestionStatus) => void;
@@ -120,9 +123,16 @@ export default function QuestionListView({
   sortDir?: QuestionSortDir;
   onSort?: (field: QuestionSortField) => void;
   loading?: boolean;
+  /** Client-side filter on the current rows (title or track). */
+  localSearch?: string;
 }) {
   const activeSortBy = sortBy ?? DEFAULT_QUESTION_TABLE_SORT.sortBy;
   const activeSortDir = sortDir ?? DEFAULT_QUESTION_TABLE_SORT.sortDir;
+
+  const visibleQuestions = useMemo(() => {
+    if (!localSearch.trim()) return questions;
+    return questions.filter((q) => questionMatchesSearch(q, localSearch));
+  }, [questions, localSearch]);
 
   const questionCol = "min-w-[14rem] lg:min-w-[18rem]";
   const scopeCol = "min-w-[6.5rem]";
@@ -133,11 +143,29 @@ export default function QuestionListView({
   const viewCol = "w-14";
   const actionsCol = "min-w-[9rem]";
   const [preview, setPreview] = useState<QuestionListItem | null>(null);
+  const tableColSpan =
+    6 + (showScope ? 1 : 0) + (showActions ? 1 : 0);
+
+  const handleDelete = (q: QuestionListItem) => {
+    if (!onDelete) return;
+    const title = splitQuestionFields(q.content).title;
+    if (
+      !confirmDestructive(
+        `Delete "${title}"? This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    onDelete(q._id);
+  };
 
   return (
     <>
       <div className={clsx("space-y-3 lg:hidden", loading && "opacity-60")}>
-        {questions.map((q) => (
+        {visibleQuestions.length === 0 ? (
+          <p className="text-sm text-[var(--muted)]">No questions match your search.</p>
+        ) : null}
+        {visibleQuestions.map((q) => (
           <div
             key={q._id}
             style={questionRowVars(q.status)}
@@ -188,7 +216,7 @@ export default function QuestionListView({
                   </Button>
                 )}
                 {onDelete && (
-                  <Button variant="ghost" size="sm" onClick={() => onDelete(q._id)}>
+                  <Button variant="ghost" size="sm" onClick={() => handleDelete(q)}>
                     Delete
                   </Button>
                 )}
@@ -251,7 +279,14 @@ export default function QuestionListView({
             </tr>
           </thead>
           <tbody>
-            {questions.map((q) => (
+            {visibleQuestions.length === 0 ? (
+              <tr>
+                <td colSpan={tableColSpan} className="px-4 py-8 text-center text-sm text-[var(--muted)]">
+                  No questions match your search.
+                </td>
+              </tr>
+            ) : null}
+            {visibleQuestions.map((q) => (
               <tr
                 key={q._id}
                 className={clsx(
@@ -314,7 +349,7 @@ export default function QuestionListView({
                         </Button>
                       )}
                       {onDelete && (
-                        <Button variant="ghost" size="sm" onClick={() => onDelete(q._id)}>
+                        <Button variant="ghost" size="sm" onClick={() => handleDelete(q)}>
                           Delete
                         </Button>
                       )}

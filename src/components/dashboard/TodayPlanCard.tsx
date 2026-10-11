@@ -8,9 +8,11 @@ import Chip from "@/components/ui/Chip";
 import TablePagination from "@/components/ui/TablePagination";
 import QuestionListView from "@/components/questions/QuestionListView";
 import type { QuestionPointBurst } from "@/lib/question-points-burst";
+import QuestionTableSearch from "@/components/questions/QuestionTableSearch";
 import {
   compareQuestions,
   DEFAULT_QUESTION_TABLE_SORT,
+  questionMatchesSearch,
   sliceTablePage,
   TABLE_PAGE_SIZE,
   toggleQuestionSort,
@@ -26,6 +28,7 @@ function QuestionSection({
   emptyMessage,
   onStatusChange,
   pointBurst,
+  searchInputId,
 }: {
   title: string;
   subtitle: string;
@@ -33,14 +36,21 @@ function QuestionSection({
   emptyMessage: string;
   onStatusChange: (id: string, status: QuestionStatus) => void;
   pointBurst?: QuestionPointBurst | null;
+  searchInputId: string;
 }) {
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState<QuestionSortField>(DEFAULT_QUESTION_TABLE_SORT.sortBy);
   const [sortDir, setSortDir] = useState<QuestionSortDir>(DEFAULT_QUESTION_TABLE_SORT.sortDir);
+  const [searchInput, setSearchInput] = useState("");
+
+  const filtered = useMemo(() => {
+    if (!searchInput.trim()) return questions;
+    return questions.filter((q) => questionMatchesSearch(q, searchInput));
+  }, [questions, searchInput]);
 
   const sorted = useMemo(
     () =>
-      [...questions].sort((a, b) =>
+      [...filtered].sort((a, b) =>
         compareQuestions(
           { ...a, trackLabel: a.trackLabel, subjectName: a.subjectName },
           { ...b, trackLabel: b.trackLabel, subjectName: b.subjectName },
@@ -48,8 +58,12 @@ function QuestionSection({
           sortDir
         )
       ),
-    [questions, sortBy, sortDir]
+    [filtered, sortBy, sortDir]
   );
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchInput]);
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / TABLE_PAGE_SIZE));
 
@@ -91,15 +105,27 @@ function QuestionSection({
         <p className="mt-0.5 text-xs text-[var(--muted)]">{subtitle}</p>
       </div>
       <div className="space-y-3">
-        <QuestionListView
-          questions={pageItems}
-          onStatusChange={onStatusChange}
-          pointBurst={pointBurst}
-          sortBy={sortBy}
-          sortDir={sortDir}
-          onSort={handleSort}
+        <QuestionTableSearch
+          value={searchInput}
+          onChange={setSearchInput}
+          inputId={searchInputId}
+          className="max-w-md"
         />
-        <TablePagination page={page} total={sorted.length} onPageChange={setPage} />
+        {filtered.length === 0 ? (
+          <p className="text-sm text-[var(--muted)]">No questions match your search.</p>
+        ) : (
+          <>
+            <QuestionListView
+              questions={pageItems}
+              onStatusChange={onStatusChange}
+              pointBurst={pointBurst}
+              sortBy={sortBy}
+              sortDir={sortDir}
+              onSort={handleSort}
+            />
+            <TablePagination page={page} total={sorted.length} onPageChange={setPage} />
+          </>
+        )}
       </div>
     </div>
   );
@@ -151,6 +177,7 @@ export default function TodayPlanCard({
               emptyMessage="No group questions for today."
               onStatusChange={onStatusChange}
               pointBurst={pointBurst}
+              searchInputId="today-group-questions-search"
             />
           )}
           {personalCount > 0 && (
@@ -161,6 +188,7 @@ export default function TodayPlanCard({
               emptyMessage="No personal questions for today."
               onStatusChange={onStatusChange}
               pointBurst={pointBurst}
+              searchInputId="today-personal-questions-search"
             />
           )}
         </div>

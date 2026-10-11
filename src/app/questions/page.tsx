@@ -29,6 +29,8 @@ import {
   type QuestionSortDir,
 } from "@/lib/utils";
 import TablePagination from "@/components/ui/TablePagination";
+import QuestionTableSearch from "@/components/questions/QuestionTableSearch";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import toast from "react-hot-toast";
 import {
   triggerQuestionPointsBurst,
@@ -71,6 +73,8 @@ export default function QuestionsPage() {
   const [practiceDate, setPracticeDate] = useState("");
   const [scope, setScope] = useState<ContentScope>("group");
   const [canAddGroupQuestions, setCanAddGroupQuestions] = useState(false);
+  const [searchInput, setSearchInput] = useState("");
+  const debouncedSearch = useDebouncedValue(searchInput, 300);
 
   const groupSubjects = useMemo(
     () => subjects.filter((s) => s.scope === "group"),
@@ -92,7 +96,10 @@ export default function QuestionsPage() {
     }
     setLoading(true);
     try {
-      const questionUrl = `/api/practice-questions?groupId=${activeGroupId}&scope=all&page=${page}&limit=${PAGE_SIZE}&period=${datePeriod}&sortBy=${sortBy}&sortDir=${sortDir}`;
+      const searchQ = debouncedSearch.trim()
+        ? `&search=${encodeURIComponent(debouncedSearch.trim())}`
+        : "";
+      const questionUrl = `/api/practice-questions?groupId=${activeGroupId}&scope=all&page=${page}&limit=${PAGE_SIZE}&period=${datePeriod}&sortBy=${sortBy}&sortDir=${sortDir}${searchQ}`;
 
       const [questionData, subjectData, groupHeader] = await Promise.all([
         apiGet<PagedQuestions>(questionUrl),
@@ -111,9 +118,13 @@ export default function QuestionsPage() {
       setLoading(false);
       setInitialLoad(false);
     }
-  }, [activeGroupId, page, datePeriod, sortBy, sortDir]);
+  }, [activeGroupId, page, datePeriod, sortBy, sortDir, debouncedSearch]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
 
   useEffect(() => {
     document.getElementById("app-main")?.scrollTo({ top: 0 });
@@ -306,6 +317,11 @@ export default function QuestionsPage() {
       </div>
 
       <div className="flex flex-col gap-3">
+        <QuestionTableSearch
+          value={searchInput}
+          onChange={setSearchInput}
+          className="max-w-md"
+        />
         <div className="flex flex-wrap gap-2">
           {QUESTION_DATE_PERIODS.map(({ id, label }) => (
             <Chip
@@ -324,15 +340,29 @@ export default function QuestionsPage() {
         </div>
       </div>
 
-      {questions.length === 0 ? (
+      {questions.length === 0 && !loading ? (
         <EmptyState
-          title={datePeriod !== "all" ? "No matching questions" : "No questions yet"}
-          description={
-            datePeriod !== "all"
-              ? "Try another period or add a question."
-              : "Add practice questions to track your preparation."
+          title={
+            debouncedSearch.trim()
+              ? "No questions match your search"
+              : datePeriod !== "all"
+                ? "No matching questions"
+                : "No questions yet"
           }
-          action={<Button onClick={openCreateModal}>Add Question</Button>}
+          description={
+            debouncedSearch.trim()
+              ? "Try a different title or track name."
+              : datePeriod !== "all"
+                ? "Try another period or add a question."
+                : "Add practice questions to track your preparation."
+          }
+          action={
+            debouncedSearch.trim() ? (
+              <Button variant="outline" onClick={() => setSearchInput("")}>Clear search</Button>
+            ) : (
+              <Button onClick={openCreateModal}>Add Question</Button>
+            )
+          }
         />
       ) : (
         <>
@@ -348,6 +378,7 @@ export default function QuestionsPage() {
             sortDir={sortDir}
             onSort={handleSort}
             loading={loading}
+            localSearch={searchInput}
           />
 
           <TablePagination

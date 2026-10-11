@@ -243,6 +243,22 @@ export function splitQuestionFields(content: string): { title: string; descripti
   };
 }
 
+export function escapeRegex(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Match question title (first line of content) or track / subject name. */
+export function questionMatchesSearch(
+  q: { content: string; trackLabel?: string; subjectName?: string },
+  query: string
+): boolean {
+  const term = query.trim().toLowerCase();
+  if (!term) return true;
+  const title = splitQuestionFields(q.content).title.toLowerCase();
+  const track = (q.trackLabel ?? q.subjectName ?? "").toLowerCase();
+  return title.includes(term) || track.includes(term);
+}
+
 export function resolveQuestionBody(body: {
   content?: string;
   title?: string;

@@ -20,6 +20,8 @@ import InviteCodeBlock from "@/components/groups/InviteCodeBlock";
 import GroupGamificationPanel from "@/components/groups/GroupGamificationPanel";
 import { useGroupHeaderActions } from "@/components/groups/GroupShell";
 import QuestionListView from "@/components/questions/QuestionListView";
+import QuestionTableSearch from "@/components/questions/QuestionTableSearch";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import TablePagination from "@/components/ui/TablePagination";
 import {
   formatSubjectTrack,
@@ -37,6 +39,7 @@ import {
   type QuestionSortField,
 } from "@/lib/utils";
 import toast from "react-hot-toast";
+import { confirmDestructive } from "@/lib/confirm-destructive";
 import {
   triggerQuestionPointsBurst,
   type QuestionPointBurst,
@@ -121,6 +124,8 @@ export default function GroupDetailPage() {
   const [transferring, setTransferring] = useState(false);
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
   const [updatingRoleMemberId, setUpdatingRoleMemberId] = useState<string | null>(null);
+  const [questionSearchInput, setQuestionSearchInput] = useState("");
+  const debouncedQuestionSearch = useDebouncedValue(questionSearchInput, 300);
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     const silent = opts?.silent ?? false;
@@ -147,8 +152,11 @@ export default function GroupDetailPage() {
   const loadGroupQuestions = useCallback(async () => {
     setQuestionsLoading(true);
     try {
+      const searchQ = debouncedQuestionSearch.trim()
+        ? `&search=${encodeURIComponent(debouncedQuestionSearch.trim())}`
+        : "";
       const data = await apiGet<PagedGroupQuestions>(
-        `/api/practice-questions?groupId=${groupId}&scope=group&period=all&page=${questionPage}&limit=${GROUP_QUESTIONS_PAGE_SIZE}&sortBy=${questionSortBy}&sortDir=${questionSortDir}`
+        `/api/practice-questions?groupId=${groupId}&scope=group&period=all&page=${questionPage}&limit=${GROUP_QUESTIONS_PAGE_SIZE}&sortBy=${questionSortBy}&sortDir=${questionSortDir}${searchQ}`
       );
       const items = Array.isArray(data) ? data : (data.items ?? []);
       const total = Array.isArray(data) ? data.length : (data.total ?? items.length);
@@ -159,10 +167,14 @@ export default function GroupDetailPage() {
     } finally {
       setQuestionsLoading(false);
     }
-  }, [groupId, questionPage, questionSortBy, questionSortDir]);
+  }, [groupId, questionPage, questionSortBy, questionSortDir, debouncedQuestionSearch]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { loadGroupQuestions(); }, [loadGroupQuestions]);
+
+  useEffect(() => {
+    setQuestionPage(1);
+  }, [debouncedQuestionSearch]);
 
   const handleQuestionSort = (field: QuestionSortField) => {
     const next = toggleQuestionSort(field, questionSortBy, questionSortDir);
@@ -418,30 +430,41 @@ export default function GroupDetailPage() {
             </div>
           }
         />
-        {questionTotal === 0 && !questionsLoading ? (
-          <p className="text-sm text-[var(--muted)]">
-            No group questions yet. Add questions everyone should practice together.
-          </p>
-        ) : (
-          <div className="space-y-3">
-            <QuestionListView
-              pointBurst={pointBurst}
-              questions={groupQuestions.map((q) => ({ ...q, scope: "group" as const }))}
-              onStatusChange={updateQuestionStatus}
-              sortBy={questionSortBy}
-              sortDir={questionSortDir}
-              onSort={handleQuestionSort}
-              loading={questionsLoading}
-            />
-            <TablePagination
-              page={questionPage}
-              total={questionTotal}
-              pageSize={GROUP_QUESTIONS_PAGE_SIZE}
-              loading={questionsLoading}
-              onPageChange={setQuestionPage}
-            />
-          </div>
-        )}
+        <div className="space-y-3">
+          <QuestionTableSearch
+            value={questionSearchInput}
+            onChange={setQuestionSearchInput}
+            inputId="group-questions-search"
+            className="max-w-md"
+          />
+          {questionTotal === 0 && !questionsLoading ? (
+            <p className="text-sm text-[var(--muted)]">
+              {debouncedQuestionSearch.trim()
+                ? "No group questions match your search."
+                : "No group questions yet. Add questions everyone should practice together."}
+            </p>
+          ) : (
+            <>
+              <QuestionListView
+                pointBurst={pointBurst}
+                questions={groupQuestions.map((q) => ({ ...q, scope: "group" as const }))}
+                onStatusChange={updateQuestionStatus}
+                sortBy={questionSortBy}
+                sortDir={questionSortDir}
+                onSort={handleQuestionSort}
+                loading={questionsLoading}
+                localSearch={questionSearchInput}
+              />
+              <TablePagination
+                page={questionPage}
+                total={questionTotal}
+                pageSize={GROUP_QUESTIONS_PAGE_SIZE}
+                loading={questionsLoading}
+                onPageChange={setQuestionPage}
+              />
+            </>
+          )}
+        </div>
       </Card>
 
       {group.gamification && <GroupGamificationPanel gamification={group.gamification} />}
@@ -515,7 +538,13 @@ export default function GroupDetailPage() {
                             variant="ghost"
                             size="sm"
                             disabled={removingMemberId === m.userId}
-                            onClick={() => removeMember(m.userId)}
+                            onClick={() => {
+                              const msg = isMe
+                                ? "Leave this group? You can rejoin with an invite code."
+                                : `Remove ${m.name} from the group?`;
+                              if (!confirmDestructive(msg)) return;
+                              removeMember(m.userId);
+                            }}
                           >
                             {removingMemberId === m.userId
                               ? "…"
@@ -647,7 +676,16 @@ export default function GroupDetailPage() {
                 variant="danger"
                 size="sm"
                 disabled={deletingGroup}
-                onClick={deleteGroup}
+                onClick={() => {
+                  if (
+                    !confirmDestructive(
+                      `Delete "${group.name}" and all questions, subjects, and progress? This cannot be undone.`
+                    )
+                  ) {
+                    return;
+                  }
+                  deleteGroup();
+                }}
               >
                 {deletingGroup ? "Deleting…" : "Delete group"}
               </Button>

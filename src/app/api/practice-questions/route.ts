@@ -16,6 +16,8 @@ import {
   type QuestionSortField,
   type QuestionSortDir,
   resolveQuestionBody,
+  escapeRegex,
+  questionMatchesSearch,
 } from "@/lib/utils";
 import {
   serializeDoc,
@@ -100,12 +102,29 @@ export async function GET(request: Request) {
       sortDirParam === "asc" || sortDirParam === "desc"
         ? sortDirParam
         : DEFAULT_QUESTION_TABLE_SORT.sortDir;
-    const subjectQuery = Subject.find({
+    const searchTerm = searchParams.get("search")?.trim() ?? "";
+
+    const subjects = await Subject.find({
       $or: [
         { groupId, scope: "group", isActive: true },
         { userId, scope: "personal", isActive: true },
       ],
     }).lean();
+
+    if (searchTerm) {
+      const regex = new RegExp(escapeRegex(searchTerm), "i");
+      const matchingSubjectIds = subjects
+        .filter((s) => regex.test(s.name))
+        .map((s) => s._id);
+      const searchOr: Record<string, unknown>[] = [{ content: regex }];
+      if (matchingSubjectIds.length > 0) {
+        searchOr.push({ subjectId: { $in: matchingSubjectIds } });
+      }
+      questionFilter.$and = [
+        ...(Array.isArray(questionFilter.$and) ? questionFilter.$and : []),
+        { $or: searchOr },
+      ];
+    }
 
     const mapQuestion = (
       q: {
@@ -174,17 +193,25 @@ export async function GET(request: Request) {
     const questionFields =
       "_id scope subjectId topicId practiceDate createdAt status confidence lastPracticed notes content link difficulty userId groupId";
 
-    const [subjects, count, questions] = await Promise.all([
-      subjectQuery,
-      paginate ? PracticeQuestion.countDocuments(questionFilter) : Promise.resolve(0),
-      PracticeQuestion.find(questionFilter).select(questionFields).lean(),
-    ]);
-    const total = count;
+    const questions = await PracticeQuestion.find(questionFilter).select(questionFields).lean();
     const subjectMap = new Map(subjects.map((s) => [String(s._id), s]));
     const progressMap = await progressForQuestions(questions);
     let result = questions
       .map((q) => mapQuestion(q, subjectMap, progressMap))
       .sort((a, b) => compareQuestions(a, b, sortBy, sortDir));
+    if (searchTerm) {
+      result = result.filter((q) =>
+        questionMatchesSearch(
+          {
+            content: String((q as { content?: string }).content ?? ""),
+            trackLabel: q.trackLabel,
+            subjectName: q.subjectName,
+          },
+          searchTerm
+        )
+      );
+    }
+    const total = result.length;
     if (paginate) result = result.slice(skip, skip + limit);
 
     if (paginate) {
