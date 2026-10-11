@@ -202,18 +202,24 @@ export default function GroupDetailPage() {
   const updateQuestionStatus = async (id: string, status: QuestionStatus) => {
     const normalized = normalizeQuestionStatus(status);
     let previousStatus: QuestionStatus | undefined;
+    let found = false;
     setGroupQuestions((prev) => {
       const current = prev.find((q) => q._id === id);
       if (!current) return prev;
-      previousStatus = current.status;
+      found = true;
+      previousStatus = normalizeQuestionStatus(current.status ?? "not_started");
       return prev.map((q) => (q._id === id ? { ...q, status: normalized } : q));
     });
-    if (!previousStatus) return;
+    if (!found) return;
 
     try {
-      const updated = await apiPatch<{ pointsEarnedNow?: number }>(
+      const updated = await apiPatch<{ status?: QuestionStatus; pointsEarnedNow?: number }>(
         `/api/practice-questions/${id}`,
         { status: normalized }
+      );
+      const savedStatus = normalizeQuestionStatus(updated.status ?? normalized);
+      setGroupQuestions((prev) =>
+        prev.map((q) => (q._id === id ? { ...q, status: savedStatus } : q))
       );
       const earned = updated.pointsEarnedNow;
       triggerQuestionPointsBurst(setPointBurst, id, earned);

@@ -4,9 +4,11 @@ import { jsonOk, jsonError } from "@/lib/utils";
 import { serializeDoc } from "@/lib/services";
 import {
   buildGroupDoneQuestionStats,
+  buildMemberDoneQuestionStats,
   buildQuestionStats,
   toQuestionsByDate,
 } from "@/lib/question-stats";
+import { normalizeQuestionStatus } from "@/lib/utils";
 import Subject from "@/models/Subject";
 import Group from "@/models/Group";
 import PracticeQuestion from "@/models/PracticeQuestion";
@@ -58,19 +60,19 @@ export async function GET(request: Request) {
 
     const [subjects, group, groupQuestions, personalQuestions] = await Promise.all([
       Subject.find(filter).sort({ order: 1 }).lean(),
-      groupId ? Group.findById(groupId).lean() : Promise.resolve(null),
+      groupId ? Group.findById(groupId).select("members").lean() : Promise.resolve(null),
       groupId
         ? PracticeQuestion.find({ groupId, scope: "group" })
             .select("_id subjectId practiceDate createdAt")
             .lean()
         : Promise.resolve([]),
       PracticeQuestion.find({ userId, scope: "personal" })
-        .select("subjectId practiceDate createdAt")
+        .select("_id subjectId practiceDate createdAt status")
         .lean(),
     ]);
 
     const memberIds = (group?.members ?? []).map((m) => String(m.userId));
-    const questionProgress =
+    const groupQuestionProgress =
       groupId && groupQuestions.length > 0 && memberIds.length > 0
         ? await QuestionProgress.find({
             userId: { $in: memberIds },
@@ -78,18 +80,45 @@ export async function GET(request: Request) {
           }).lean()
         : [];
 
+    const personalProgress =
+      personalQuestions.length > 0
+        ? await QuestionProgress.find({
+            userId,
+            questionId: { $in: personalQuestions.map((q) => q._id) },
+          }).lean()
+        : [];
+
+    const personalStatusByQuestionId = new Map(
+      personalProgress.map((p) => [
+        String(p.questionId),
+        normalizeQuestionStatus(p.status ?? "not_started"),
+      ])
+    );
+    for (const q of personalQuestions) {
+      const id = String(q._id);
+      if (!personalStatusByQuestionId.has(id)) {
+        personalStatusByQuestionId.set(
+          id,
+          normalizeQuestionStatus(q.status ?? "not_started")
+        );
+      }
+    }
+
     const groupAddedStats = buildQuestionStats(groupQuestions);
     const groupDoneStats = buildGroupDoneQuestionStats(
       groupQuestions,
       memberIds,
-      questionProgress
+      groupQuestionProgress
     );
-    const personalStats = buildQuestionStats(personalQuestions);
+    const personalDoneStats = buildMemberDoneQuestionStats(
+      personalQuestions,
+      personalStatusByQuestionId
+    );
 
     const stats = subjects.map((s) => {
       const sid = String(s._id);
       const qStats =
-        s.scope === "personal" ? personalStats.get(sid) : groupDoneStats.get(sid);
+        s.scope === "personal" ? personalDoneStats.get(sid) : groupDoneStats.get(sid);
       const questionCount = qStats?.count ?? 0;
       const addedStats = s.scope === "group" ? groupAddedStats.get(sid) : qStats;
       const questionsByDate = addedStats ? toQuestionsByDate(addedStats.byDate) : [];

@@ -28,6 +28,7 @@ import {
   serializeDoc,
   startOfDay,
 } from "./utils";
+import { questionProgressFields, questionStatusForUser } from "./question-progress";
 import type { ContentUnit, TodayQuestion } from "@/types";
 import {
   buildGroupGamification,
@@ -658,6 +659,7 @@ export async function listGroupPracticeQuestionsForUser(groupId: string, userId:
     const subject = subjectMap.get(String(q.subjectId));
     const p = progressMap.get(String(q._id));
     const practiceDate = q.practiceDate?.toISOString();
+    const fields = questionProgressFields(p, q);
     return {
       ...base,
       ...(practiceDate ? { practiceDate } : {}),
@@ -669,10 +671,7 @@ export async function listGroupPracticeQuestionsForUser(groupId: string, userId:
             contentUnit: subject.contentUnit ?? "questions",
           })
         : "",
-      status: normalizeQuestionStatus(p?.status ?? "not_started"),
-      confidence: p?.confidence ?? "weak",
-      lastPracticed: p?.lastPracticed?.toISOString(),
-      notes: p?.notes,
+      ...fields,
     };
   });
 }
@@ -699,10 +698,7 @@ function mapTodayQuestion(
         contentUnit: subject.contentUnit ?? "questions",
       })
     : "";
-  const status =
-    q.scope === "group"
-      ? normalizeQuestionStatus(progressMap.get(String(q._id))?.status ?? "not_started")
-      : normalizeQuestionStatus(q.status ?? "not_started");
+  const status = questionStatusForUser(progressMap.get(String(q._id)), q);
 
   return {
     _id: String(q._id),

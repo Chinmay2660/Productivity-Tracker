@@ -7,6 +7,7 @@ import {
   isQuestionDone,
   trackProgress,
 } from "@/lib/analytics-questions";
+import { questionStatusForUser } from "@/lib/question-progress";
 import { buildMemberGamification } from "@/lib/question-gamification";
 import { getGroupInsights } from "@/lib/services";
 import { analyticsCacheKey, getCached } from "@/lib/ttl-cache";
@@ -96,14 +97,17 @@ async function buildAnalytics(
     (group?.members ?? []).map((m) => [String(m.userId), m.role as "owner" | "admin" | "member"])
   );
 
-  const groupQuestionIds = groupQuestions.map((q) => q._id);
+  const allQuestionIds = [
+    ...groupQuestions.map((q) => q._id),
+    ...personalQuestions.map((q) => q._id),
+  ];
   const topicIds = topics.map((t) => t._id);
 
   const [questionProgress, topicProgress, insights] = await Promise.all([
-    groupQuestionIds.length > 0
+    allQuestionIds.length > 0
       ? QuestionProgress.find({
           userId,
-          questionId: { $in: groupQuestionIds },
+          questionId: { $in: allQuestionIds },
         })
           .select("questionId status lastPracticed firstCompletedAt pointsAwarded")
           .lean()
@@ -128,16 +132,20 @@ async function buildAnalytics(
     activeSubjectIds.has(String(q.subjectId))
   );
 
-  const personalWithStatus = visiblePersonal.map((q) => ({
-    subjectId: q.subjectId,
-    status: normalizeQuestionStatus(q.status ?? "not_started"),
-    completedAt: q.lastPracticed ?? q.firstCompletedAt,
-    practiceDate: q.practiceDate ?? q.createdAt,
-  }));
+  const personalWithStatus = visiblePersonal.map((q) => {
+    const p = progressByQuestion.get(String(q._id));
+    const status = questionStatusForUser(p, q);
+    return {
+      subjectId: q.subjectId,
+      status,
+      completedAt: p?.lastPracticed ?? p?.firstCompletedAt ?? q.lastPracticed ?? q.firstCompletedAt,
+      practiceDate: q.practiceDate ?? q.createdAt,
+    };
+  });
 
   const groupWithStatus = visibleGroup.map((q) => {
     const p = progressByQuestion.get(String(q._id));
-    const status = normalizeQuestionStatus(p?.status ?? "not_started");
+    const status = questionStatusForUser(p, q);
     return {
       subjectId: q.subjectId,
       status,
