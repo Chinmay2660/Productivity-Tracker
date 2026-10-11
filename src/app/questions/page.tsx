@@ -18,13 +18,17 @@ import {
   formatSubjectTrack,
   joinQuestionFields,
   splitQuestionFields,
+  questionPracticeDay,
   toDateInputValue,
   QUESTION_DATE_PERIODS,
   normalizeQuestionStatus,
+  DEFAULT_QUESTION_TABLE_SORT,
+  toggleQuestionSort,
   type QuestionDatePeriod,
   type QuestionSortField,
   type QuestionSortDir,
 } from "@/lib/utils";
+import TablePagination from "@/components/ui/TablePagination";
 import toast from "react-hot-toast";
 import {
   triggerQuestionPointsBurst,
@@ -52,8 +56,8 @@ export default function QuestionsPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [datePeriod, setDatePeriod] = useState<QuestionDatePeriod>("today");
-  const [sortBy, setSortBy] = useState<QuestionSortField>("date");
-  const [sortDir, setSortDir] = useState<QuestionSortDir>("desc");
+  const [sortBy, setSortBy] = useState<QuestionSortField>(DEFAULT_QUESTION_TABLE_SORT.sortBy);
+  const [sortDir, setSortDir] = useState<QuestionSortDir>(DEFAULT_QUESTION_TABLE_SORT.sortDir);
   const [loading, setLoading] = useState(true);
   const [initialLoad, setInitialLoad] = useState(true);
   const [error, setError] = useState("");
@@ -64,7 +68,7 @@ export default function QuestionsPage() {
   const [questionDescription, setQuestionDescription] = useState("");
   const [subjectId, setSubjectId] = useState("");
   const [link, setLink] = useState("");
-  const [practiceDate, setPracticeDate] = useState(toDateInputValue());
+  const [practiceDate, setPracticeDate] = useState("");
   const [scope, setScope] = useState<ContentScope>("group");
   const [canAddGroupQuestions, setCanAddGroupQuestions] = useState(false);
 
@@ -128,15 +132,10 @@ export default function QuestionsPage() {
     }
   }, [canAddGroupQuestions, scope]);
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-
   const handleSort = (field: QuestionSortField) => {
-    if (sortBy === field) {
-      setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
-    } else {
-      setSortBy(field);
-      setSortDir(field === "date" ? "desc" : "asc");
-    }
+    const next = toggleQuestionSort(field, sortBy, sortDir);
+    setSortBy(next.sortBy);
+    setSortDir(next.sortDir);
     setPage(1);
   };
 
@@ -145,7 +144,7 @@ export default function QuestionsPage() {
     setQuestionTitle("");
     setQuestionDescription("");
     setLink("");
-    setPracticeDate(toDateInputValue());
+    setPracticeDate("");
     setScope(canAddGroupQuestions ? "group" : "personal");
     setSubjectId(
       (canAddGroupQuestions ? groupSubjects[0] : personalSubjects[0])?._id ??
@@ -167,7 +166,7 @@ export default function QuestionsPage() {
     setQuestionTitle(parts.title);
     setQuestionDescription(parts.description);
     setLink(full.link ?? "");
-    setPracticeDate(toDateInputValue(full.practiceDate ?? full.createdAt));
+    setPracticeDate(questionPracticeDay(full));
     setScope(full.scope);
     setSubjectId(full.subjectId);
     setShowModal(true);
@@ -185,7 +184,7 @@ export default function QuestionsPage() {
       description: questionDescription.trim(),
       link: link.trim() || undefined,
       subjectId,
-      practiceDate,
+      practiceDate: practiceDate.trim() ? practiceDate : null,
     };
     const mergedContent = joinQuestionFields(payload.title, payload.description);
     setSaving(true);
@@ -202,7 +201,7 @@ export default function QuestionsPage() {
                   content: mergedContent,
                   link: payload.link,
                   subjectId,
-                  practiceDate,
+                  practiceDate: practiceDate.trim() || undefined,
                   subjectName: subject?.name ?? q.subjectName,
                   trackLabel: subject ? formatSubjectTrack(subject) : q.trackLabel,
                 }
@@ -306,8 +305,6 @@ export default function QuestionsPage() {
         </Button>
       </div>
 
-      <MotivationBanner />
-
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap gap-2">
           {QUESTION_DATE_PERIODS.map(({ id, label }) => (
@@ -353,35 +350,22 @@ export default function QuestionsPage() {
             loading={loading}
           />
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-[var(--muted)]">
-              Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
-              {datePeriod !== "all" ? ` · ${QUESTION_DATE_PERIODS.find((p) => p.id === datePeriod)?.label}` : ""}
-            </p>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1 || loading}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                Previous
-              </Button>
-              <span className="px-2 text-sm text-[var(--muted)]">
-                Page {page} of {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= totalPages || loading}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
+          <TablePagination
+            page={page}
+            total={total}
+            pageSize={PAGE_SIZE}
+            loading={loading}
+            onPageChange={setPage}
+            summaryExtra={
+              datePeriod !== "all"
+                ? QUESTION_DATE_PERIODS.find((p) => p.id === datePeriod)?.label
+                : undefined
+            }
+          />
         </>
       )}
+
+      <MotivationBanner />
 
       <Modal
         open={showModal}
@@ -425,6 +409,7 @@ export default function QuestionsPage() {
                 onChange={(e) => setPracticeDate(e.target.value)}
                 className="input-date-end mt-1 w-full rounded-lg border border-[var(--input-border)] px-4 py-2 text-sm dark:border-[var(--input-border)] dark:bg-[var(--input-bg)]"
               />
+              <p className="mt-1 text-xs text-[var(--muted)]">Leave empty to keep in All only until scheduled.</p>
             </div>
           </div>
           {(editingId ? subjects.filter((s) => s.scope === scope) : modalSubjects).length === 0 ? (

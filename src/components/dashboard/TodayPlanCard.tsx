@@ -1,11 +1,22 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Card, { CardHeader } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Chip from "@/components/ui/Chip";
+import TablePagination from "@/components/ui/TablePagination";
 import QuestionListView from "@/components/questions/QuestionListView";
 import type { QuestionPointBurst } from "@/lib/question-points-burst";
+import {
+  compareQuestions,
+  DEFAULT_QUESTION_TABLE_SORT,
+  sliceTablePage,
+  TABLE_PAGE_SIZE,
+  toggleQuestionSort,
+  type QuestionSortDir,
+  type QuestionSortField,
+} from "@/lib/utils";
 import type { QuestionStatus, TodayQuestion } from "@/types";
 
 function QuestionSection({
@@ -23,6 +34,41 @@ function QuestionSection({
   onStatusChange: (id: string, status: QuestionStatus) => void;
   pointBurst?: QuestionPointBurst | null;
 }) {
+  const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState<QuestionSortField>(DEFAULT_QUESTION_TABLE_SORT.sortBy);
+  const [sortDir, setSortDir] = useState<QuestionSortDir>(DEFAULT_QUESTION_TABLE_SORT.sortDir);
+
+  const sorted = useMemo(
+    () =>
+      [...questions].sort((a, b) =>
+        compareQuestions(
+          { ...a, trackLabel: a.trackLabel, subjectName: a.subjectName },
+          { ...b, trackLabel: b.trackLabel, subjectName: b.subjectName },
+          sortBy,
+          sortDir
+        )
+      ),
+    [questions, sortBy, sortDir]
+  );
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / TABLE_PAGE_SIZE));
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const pageItems = useMemo(
+    () => sliceTablePage(sorted, page, TABLE_PAGE_SIZE),
+    [sorted, page]
+  );
+
+  const handleSort = (field: QuestionSortField) => {
+    const next = toggleQuestionSort(field, sortBy, sortDir);
+    setSortBy(next.sortBy);
+    setSortDir(next.sortDir);
+    setPage(1);
+  };
+
   if (questions.length === 0) {
     return (
       <div>
@@ -44,11 +90,17 @@ function QuestionSection({
         </div>
         <p className="mt-0.5 text-xs text-[var(--muted)]">{subtitle}</p>
       </div>
-      <QuestionListView
-        questions={questions}
-        onStatusChange={onStatusChange}
-        pointBurst={pointBurst}
-      />
+      <div className="space-y-3">
+        <QuestionListView
+          questions={pageItems}
+          onStatusChange={onStatusChange}
+          pointBurst={pointBurst}
+          sortBy={sortBy}
+          sortDir={sortDir}
+          onSort={handleSort}
+        />
+        <TablePagination page={page} total={sorted.length} onPageChange={setPage} />
+      </div>
     </div>
   );
 }

@@ -212,9 +212,9 @@ export function parseAppDateTime(value: string | Date): Date {
   return new Date(value);
 }
 
-export function questionPracticeDay(q: { practiceDate?: Date | string; createdAt: Date | string }): string {
-  const d = q.practiceDate ? new Date(q.practiceDate) : new Date(q.createdAt);
-  return toDateInputValue(d);
+export function questionPracticeDay(q: { practiceDate?: Date | string; createdAt?: Date | string }): string {
+  if (!q.practiceDate) return "";
+  return toDateInputValue(new Date(q.practiceDate));
 }
 
 export function questionPreview(content: string, maxLen = 80): string {
@@ -273,6 +273,11 @@ export const QUESTION_DATE_PERIODS: { id: QuestionDatePeriod; label: string }[] 
   { id: "month", label: "Month" },
   { id: "all", label: "All" },
 ];
+
+/** Questions without `practiceDate` only appear when period is "all". */
+export function practiceQuestionScheduledInPeriod(start: Date, end: Date) {
+  return { practiceDate: { $gte: start, $lt: end } };
+}
 
 export function questionDatePeriodRange(period: QuestionDatePeriod): { start: Date; end: Date } | null {
   if (period === "all") return null;
@@ -367,9 +372,50 @@ export function normalizeQuestionStatus(status: string): QuestionStatus {
 export type QuestionSortField = "date" | "status" | "track" | "scope";
 export type QuestionSortDir = "asc" | "desc";
 
+/** Default for all question tables (list + API). */
+export const DEFAULT_QUESTION_TABLE_SORT: {
+  sortBy: QuestionSortField;
+  sortDir: QuestionSortDir;
+} = {
+  sortBy: "date",
+  sortDir: "desc",
+};
+
+export const TABLE_PAGE_SIZE = 10;
+
+export function sliceTablePage<T>(items: T[], page: number, pageSize = TABLE_PAGE_SIZE): T[] {
+  const start = (page - 1) * pageSize;
+  return items.slice(start, start + pageSize);
+}
+
+export function toggleQuestionSort(
+  field: QuestionSortField,
+  sortBy: QuestionSortField,
+  sortDir: QuestionSortDir
+): { sortBy: QuestionSortField; sortDir: QuestionSortDir } {
+  if (sortBy === field) {
+    return { sortBy: field, sortDir: sortDir === "asc" ? "desc" : "asc" };
+  }
+  return {
+    sortBy: field,
+    sortDir: field === DEFAULT_QUESTION_TABLE_SORT.sortBy
+      ? DEFAULT_QUESTION_TABLE_SORT.sortDir
+      : "asc",
+  };
+}
+
 export function questionStatusSortIndex(status: string): number {
   const i = QUESTION_STATUS_ORDER.indexOf(normalizeQuestionStatus(status));
   return i === -1 ? QUESTION_STATUS_ORDER.length : i;
+}
+
+/** Sort key for practice date; unscheduled rows sort after all scheduled days. */
+export function questionPracticeDateSortKey(q: {
+  practiceDate?: string;
+  createdAt?: string;
+}): number {
+  if (q.practiceDate) return startOfDay(new Date(q.practiceDate)).getTime();
+  return Number.NEGATIVE_INFINITY;
 }
 
 export function compareQuestions<
@@ -380,13 +426,18 @@ export function compareQuestions<
     scope?: string;
     trackLabel?: string;
     subjectName?: string;
+    _id?: string;
   },
 >(a: T, b: T, sortBy: QuestionSortField, sortDir: QuestionSortDir): number {
   const dir = sortDir === "asc" ? 1 : -1;
   if (sortBy === "date") {
-    const da = new Date(a.practiceDate ?? a.createdAt ?? 0).getTime();
-    const db = new Date(b.practiceDate ?? b.createdAt ?? 0).getTime();
-    return (da - db) * dir;
+    const da = questionPracticeDateSortKey(a);
+    const db = questionPracticeDateSortKey(b);
+    if (da !== db) return (da - db) * dir;
+    const ca = new Date(a.createdAt ?? 0).getTime();
+    const cb = new Date(b.createdAt ?? 0).getTime();
+    if (ca !== cb) return (ca - cb) * dir;
+    return String(a._id ?? "").localeCompare(String(b._id ?? "")) * dir;
   }
   if (sortBy === "status") {
     return (questionStatusSortIndex(a.status) - questionStatusSortIndex(b.status)) * dir;

@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useUser } from "@/components/providers/UserProvider";
 import { apiGet, apiPatch, getErrorMessage } from "@/lib/api";
-import { normalizeQuestionStatus } from "@/lib/utils";
+import TablePagination from "@/components/ui/TablePagination";
+import { normalizeQuestionStatus, sliceTablePage, TABLE_PAGE_SIZE } from "@/lib/utils";
 import toast from "react-hot-toast";
 import {
   triggerQuestionPointsBurst,
@@ -29,8 +30,13 @@ export default function DashboardPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [pointBurst, setPointBurst] = useState<QuestionPointBurst | null>(null);
+  const [memberPage, setMemberPage] = useState(1);
 
   const activeGroupId = user?.activeGroupId;
+  const memberPageItems = useMemo(
+    () => sliceTablePage(data?.memberStats ?? [], memberPage, TABLE_PAGE_SIZE),
+    [data?.memberStats, memberPage]
+  );
 
   const load = useCallback(async (silent = false) => {
     if (!user?._id) return;
@@ -150,6 +156,7 @@ export default function DashboardPage() {
           }
         />
         {data.memberStats && data.memberStats.length > 0 ? (
+          <>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -160,7 +167,7 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {data.memberStats.map((m) => (
+                {memberPageItems.map((m) => (
                   <tr key={m.userId} className="table-row">
                     <td className="py-2 font-medium">
                       <Link href={`/users/${m.userId}`} className="text-brand hover:underline">
@@ -174,6 +181,14 @@ export default function DashboardPage() {
               </tbody>
             </table>
           </div>
+          <div className="mt-4">
+            <TablePagination
+              page={memberPage}
+              total={data.memberStats.length}
+              onPageChange={setMemberPage}
+            />
+          </div>
+          </>
         ) : (
           <p className="text-sm text-[var(--muted)]">No group members yet.</p>
         )}

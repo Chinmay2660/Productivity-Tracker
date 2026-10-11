@@ -615,10 +615,10 @@ export async function listGroupPracticeQuestionsForUser(groupId: string, userId:
     const base = serializeDoc(q);
     const subject = subjectMap.get(String(q.subjectId));
     const p = progressMap.get(String(q._id));
-    const practiceDate = (q.practiceDate ?? q.createdAt).toISOString();
+    const practiceDate = q.practiceDate?.toISOString();
     return {
       ...base,
-      practiceDate,
+      ...(practiceDate ? { practiceDate } : {}),
       subjectName: subject?.name ?? "",
       trackLabel: subject
         ? formatSubjectTrack({
@@ -669,7 +669,7 @@ function mapTodayQuestion(
     subjectName: subject?.name ?? "",
     trackLabel,
     status,
-    practiceDate: (q.practiceDate ?? q.createdAt).toISOString(),
+    practiceDate: q.practiceDate?.toISOString(),
     link: q.link,
   };
 }
@@ -681,19 +681,14 @@ export async function getTodayQuestionsForUser(
   const range = questionDatePeriodRange("today");
   if (!range) return { group: [], personal: [] };
 
-  const dateFilter = {
-    $or: [
-      { practiceDate: { $gte: range.start, $lt: range.end } },
-      { practiceDate: { $exists: false }, createdAt: { $gte: range.start, $lt: range.end } },
-    ],
-  };
+  const dateFilter = { practiceDate: { $gte: range.start, $lt: range.end } };
 
   const [groupQuestions, personalQuestions, subjects] = await Promise.all([
     PracticeQuestion.find({ groupId, scope: "group", ...dateFilter })
-      .sort({ practiceDate: 1, createdAt: 1 })
+      .sort({ practiceDate: -1, createdAt: -1 })
       .lean(),
     PracticeQuestion.find({ userId, groupId, scope: "personal", ...dateFilter })
-      .sort({ practiceDate: 1, createdAt: 1 })
+      .sort({ practiceDate: -1, createdAt: -1 })
       .lean(),
     Subject.find({
       $or: [

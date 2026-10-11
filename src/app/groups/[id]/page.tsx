@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useUser } from "@/components/providers/UserProvider";
@@ -19,13 +19,20 @@ import { GroupDetailSkeleton, ErrorState } from "@/components/ui/StateViews";
 import InviteCodeBlock from "@/components/groups/InviteCodeBlock";
 import GroupGamificationPanel from "@/components/groups/GroupGamificationPanel";
 import QuestionListView from "@/components/questions/QuestionListView";
+import TablePagination from "@/components/ui/TablePagination";
 import {
   formatSubjectTrack,
   isGroupFull,
   JOIN_CODE_TTL_MINUTES,
   MAX_GROUP_MEMBERS,
   normalizeQuestionStatus,
+  sliceTablePage,
+  TABLE_PAGE_SIZE,
+  DEFAULT_QUESTION_TABLE_SORT,
+  toggleQuestionSort,
   toDateInputValue,
+  type QuestionSortDir,
+  type QuestionSortField,
 } from "@/lib/utils";
 import toast from "react-hot-toast";
 import {
@@ -50,7 +57,13 @@ type GroupDetail = Group & {
   topicCount: number;
   countdown: { days: number; hours: number; interviewDate: string };
   subjects?: Subject[];
-  groupQuestions?: GroupQuestion[];
+};
+
+type PagedGroupQuestions = {
+  items: GroupQuestion[];
+  total: number;
+  page: number;
+  limit: number;
 };
 
 function mergeGroupMembers(prev: GroupDetail, updated: Group): GroupDetail {
@@ -79,6 +92,16 @@ export default function GroupDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [groupQuestions, setGroupQuestions] = useState<GroupQuestion[]>([]);
+  const [questionTotal, setQuestionTotal] = useState(0);
+  const [questionPage, setQuestionPage] = useState(1);
+  const [questionsLoading, setQuestionsLoading] = useState(false);
+  const [questionSortBy, setQuestionSortBy] = useState<QuestionSortField>(
+    DEFAULT_QUESTION_TABLE_SORT.sortBy
+  );
+  const [questionSortDir, setQuestionSortDir] = useState<QuestionSortDir>(
+    DEFAULT_QUESTION_TABLE_SORT.sortDir
+  );
+  const [memberPage, setMemberPage] = useState(1);
   const [pointBurst, setPointBurst] = useState<QuestionPointBurst | null>(null);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [showQuestionModal, setShowQuestionModal] = useState(false);
@@ -102,12 +125,10 @@ export default function GroupDetailPage() {
     if (!silent) setLoading(true);
     try {
       const data = await apiGet<GroupDetail>(
-        `/api/groups/${groupId}?include=questions,subjects`
+        `/api/groups/${groupId}?include=subjects`
       );
       const subjectData = data.subjects ?? [];
-      const questionData = data.groupQuestions ?? [];
       setGroup(data);
-      setGroupQuestions(questionData);
       setSubjects(subjectData);
       setNewSubjectId((current) =>
         current || subjectData.length === 0 ? current : subjectData[0]._id
@@ -121,7 +142,45 @@ export default function GroupDetailPage() {
     }
   }, [groupId]);
 
+  const loadGroupQuestions = useCallback(async () => {
+    setQuestionsLoading(true);
+    try {
+      const data = await apiGet<PagedGroupQuestions>(
+        `/api/practice-questions?groupId=${groupId}&scope=group&period=all&page=${questionPage}&limit=${TABLE_PAGE_SIZE}&sortBy=${questionSortBy}&sortDir=${questionSortDir}`
+      );
+      setGroupQuestions(data.items);
+      setQuestionTotal(data.total);
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to load group questions"));
+    } finally {
+      setQuestionsLoading(false);
+    }
+  }, [groupId, questionPage, questionSortBy, questionSortDir]);
+
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadGroupQuestions(); }, [loadGroupQuestions]);
+
+  const handleQuestionSort = (field: QuestionSortField) => {
+    const next = toggleQuestionSort(field, questionSortBy, questionSortDir);
+    setQuestionSortBy(next.sortBy);
+    setQuestionSortDir(next.sortDir);
+    setQuestionPage(1);
+  };
+
+  const membersByJoinDate = useMemo(() => {
+    if (!group) return [];
+    const joinedAt = new Map(
+      group.members.map((m) => [String(m.userId), new Date(m.joinedAt).getTime()])
+    );
+    return [...group.memberStats].sort(
+      (a, b) => (joinedAt.get(b.userId) ?? 0) - (joinedAt.get(a.userId) ?? 0)
+    );
+  }, [group]);
+
+  const memberPageItems = useMemo(
+    () => sliceTablePage(membersByJoinDate, memberPage, TABLE_PAGE_SIZE),
+    [membersByJoinDate, memberPage]
+  );
 
   const updateQuestionStatus = async (id: string, status: QuestionStatus) => {
     const normalized = normalizeQuestionStatus(status);
@@ -179,6 +238,8 @@ export default function GroupDetailPage() {
       setNewQuestionTitle("");
       setNewQuestionDescription("");
       setPracticeDate(toDateInputValue());
+      if (questionPage !== 1) setQuestionPage(1);
+      else loadGroupQuestions();
       load({ silent: true });
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to add question"));
@@ -348,7 +409,7 @@ export default function GroupDetailPage() {
               </tr>
             </thead>
             <tbody>
-              {group.memberStats.map((m) => {
+              {memberPageItems.map((m) => {
                 const points =
                   group.gamification?.leaderboard.find((g) => g.userId === m.userId)?.totalPoints ?? 0;
                 const isMe = m.userId === user?._id;
@@ -413,6 +474,13 @@ export default function GroupDetailPage() {
             </tbody>
           </table>
         </div>
+        <div className="mt-4">
+          <TablePagination
+            page={memberPage}
+            total={group.memberStats.length}
+            onPageChange={setMemberPage}
+          />
+        </div>
       </Card>
 
       <Card>
@@ -432,16 +500,28 @@ export default function GroupDetailPage() {
             </div>
           }
         />
-        {groupQuestions.length === 0 ? (
+        {questionTotal === 0 && !questionsLoading ? (
           <p className="text-sm text-[var(--muted)]">
             No group questions yet. Add questions everyone should practice together.
           </p>
         ) : (
-          <QuestionListView
-            pointBurst={pointBurst}
-            questions={groupQuestions.map((q) => ({ ...q, scope: "group" as const }))}
-            onStatusChange={updateQuestionStatus}
-          />
+          <div className="space-y-3">
+            <QuestionListView
+              pointBurst={pointBurst}
+              questions={groupQuestions.map((q) => ({ ...q, scope: "group" as const }))}
+              onStatusChange={updateQuestionStatus}
+              sortBy={questionSortBy}
+              sortDir={questionSortDir}
+              onSort={handleQuestionSort}
+              loading={questionsLoading}
+            />
+            <TablePagination
+              page={questionPage}
+              total={questionTotal}
+              loading={questionsLoading}
+              onPageChange={setQuestionPage}
+            />
+          </div>
         )}
       </Card>
 

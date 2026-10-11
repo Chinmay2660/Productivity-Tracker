@@ -105,7 +105,8 @@ function resolveAwardedPoints(
 
   const normalized = normalizeQuestionStatus(q.status);
   if (normalized === "not_started" || normalized === "add_to_todo") {
-    const due = startOfDay(new Date(q.practiceDate ?? q.createdAt ?? now));
+    if (!q.practiceDate) return { points: 0, bucket: "pending" };
+    const due = startOfDay(new Date(q.practiceDate));
     if (startOfDay(now).getTime() > due.getTime()) return { points: 0, bucket: "zero" };
     return { points: 0, bucket: "pending" };
   }
@@ -139,8 +140,8 @@ export type GroupGamification = {
   dailyPoints: { date: string; label: string; points: number }[];
 };
 
-function practiceDay(q: { practiceDate?: Date | string; createdAt?: Date | string }): Date {
-  return startOfDay(new Date(q.practiceDate ?? q.createdAt ?? new Date()));
+function practiceDay(q: { practiceDate?: Date | string }): Date {
+  return startOfDay(new Date(q.practiceDate ?? new Date()));
 }
 
 export function buildMemberGamification(
