@@ -2,6 +2,7 @@
 
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
+import QuestionDescriptionBlock from "@/components/questions/QuestionDescriptionBlock";
 import { splitQuestionFields } from "@/lib/utils";
 import { ExternalLink } from "lucide-react";
 
@@ -31,9 +32,13 @@ export default function QuestionPreviewModal({
           <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">
             Description
           </p>
-          <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--foreground)]">
-            {description || "—"}
-          </p>
+          {description ? (
+            <div className="mt-1">
+              <QuestionDescriptionBlock description={description} />
+            </div>
+          ) : (
+            <p className="mt-1 text-sm text-[var(--muted)]">—</p>
+          )}
         </div>
         {link ? (
           <a
