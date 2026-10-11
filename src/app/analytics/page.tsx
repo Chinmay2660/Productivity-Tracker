@@ -66,7 +66,7 @@ export default function AnalyticsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-[var(--foreground)]">Analytics</h1>
-        <p className="mt-1 text-sm text-[var(--muted)]">Preparation statistics and performance trends.</p>
+        <p className="mt-1 text-sm text-[var(--muted)]">A quick snapshot of your prep progress.</p>
       </div>
 
       <AnalyticsCharts data={data} currentUserId={user?._id} />
