@@ -201,16 +201,13 @@ export default function GroupDetailPage() {
 
   const updateQuestionStatus = async (id: string, status: QuestionStatus) => {
     const normalized = normalizeQuestionStatus(status);
-    let previousStatus: QuestionStatus | undefined;
-    let found = false;
-    setGroupQuestions((prev) => {
-      const current = prev.find((q) => q._id === id);
-      if (!current) return prev;
-      found = true;
-      previousStatus = normalizeQuestionStatus(current.status ?? "not_started");
-      return prev.map((q) => (q._id === id ? { ...q, status: normalized } : q));
-    });
-    if (!found) return;
+    const current = groupQuestions.find((q) => String(q._id) === String(id));
+    if (!current) return;
+    const previousStatus = normalizeQuestionStatus(current.status ?? "not_started");
+
+    setGroupQuestions((prev) =>
+      prev.map((q) => (String(q._id) === String(id) ? { ...q, status: normalized } : q))
+    );
 
     try {
       const updated = await apiPatch<{ status?: QuestionStatus; pointsEarnedNow?: number }>(
@@ -219,7 +216,7 @@ export default function GroupDetailPage() {
       );
       const savedStatus = normalizeQuestionStatus(updated.status ?? normalized);
       setGroupQuestions((prev) =>
-        prev.map((q) => (q._id === id ? { ...q, status: savedStatus } : q))
+        prev.map((q) => (String(q._id) === String(id) ? { ...q, status: savedStatus } : q))
       );
       const earned = updated.pointsEarnedNow;
       triggerQuestionPointsBurst(setPointBurst, id, earned);
@@ -239,7 +236,7 @@ export default function GroupDetailPage() {
       }
     } catch (err) {
       setGroupQuestions((prev) =>
-        prev.map((q) => (q._id === id ? { ...q, status: previousStatus! } : q))
+        prev.map((q) => (String(q._id) === String(id) ? { ...q, status: previousStatus } : q))
       );
       toast.error(getErrorMessage(err, "Failed to update question"));
     }

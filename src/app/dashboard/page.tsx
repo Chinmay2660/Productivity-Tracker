@@ -70,27 +70,22 @@ export default function DashboardPage() {
 
   const updateQuestionStatus = async (id: string, status: QuestionStatus) => {
     const normalized = normalizeQuestionStatus(status);
-    let previousStatus: QuestionStatus | undefined;
-    let found = false;
-    setData((prev) => {
-      if (!prev) return prev;
-      const current =
-        prev.todayQuestions.group.find((q) => q._id === id) ??
-        prev.todayQuestions.personal.find((q) => q._id === id);
-      if (!current) return prev;
-      found = true;
-      previousStatus = normalizeQuestionStatus(current.status ?? "not_started");
-      const updateList = (list: typeof prev.todayQuestions.group) =>
-        list.map((q) => (q._id === id ? { ...q, status: normalized } : q));
-      return {
-        ...prev,
-        todayQuestions: {
-          group: updateList(prev.todayQuestions.group),
-          personal: updateList(prev.todayQuestions.personal),
-        },
-      };
+    if (!data) return;
+    const current =
+      data.todayQuestions.group.find((q) => String(q._id) === String(id)) ??
+      data.todayQuestions.personal.find((q) => String(q._id) === String(id));
+    if (!current) return;
+    const previousStatus = normalizeQuestionStatus(current.status ?? "not_started");
+
+    const updateList = (list: typeof data.todayQuestions.group) =>
+      list.map((q) => (String(q._id) === String(id) ? { ...q, status: normalized } : q));
+    setData({
+      ...data,
+      todayQuestions: {
+        group: updateList(data.todayQuestions.group),
+        personal: updateList(data.todayQuestions.personal),
+      },
     });
-    if (!found) return;
 
     try {
       const updated = await apiPatch<{ status?: QuestionStatus; pointsEarnedNow?: number }>(
@@ -101,7 +96,7 @@ export default function DashboardPage() {
       setData((prev) => {
         if (!prev) return prev;
         const updateList = (list: typeof prev.todayQuestions.group) =>
-          list.map((q) => (q._id === id ? { ...q, status: savedStatus } : q));
+          list.map((q) => (String(q._id) === String(id) ? { ...q, status: savedStatus } : q));
         return {
           ...prev,
           todayQuestions: {
@@ -118,7 +113,7 @@ export default function DashboardPage() {
       setData((prev) => {
         if (!prev) return prev;
         const updateList = (list: typeof prev.todayQuestions.group) =>
-          list.map((q) => (q._id === id ? { ...q, status: previousStatus! } : q));
+          list.map((q) => (String(q._id) === String(id) ? { ...q, status: previousStatus } : q));
         return {
           ...prev,
           todayQuestions: {
