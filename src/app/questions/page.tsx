@@ -240,16 +240,13 @@ export default function QuestionsPage() {
 
   const updateStatus = async (id: string, status: QuestionStatus) => {
     const normalized = normalizeQuestionStatus(status);
-    let previousStatus: QuestionStatus | undefined;
-    let found = false;
-    setQuestions((prev) => {
-      const current = prev.find((q) => q._id === id);
-      if (!current) return prev;
-      found = true;
-      previousStatus = normalizeQuestionStatus(current.status ?? "not_started");
-      return prev.map((q) => (q._id === id ? { ...q, status: normalized } : q));
-    });
-    if (!found) return;
+    const current = questions.find((q) => String(q._id) === String(id));
+    if (!current) return;
+    const previousStatus = normalizeQuestionStatus(current.status ?? "not_started");
+
+    setQuestions((prev) =>
+      prev.map((q) => (String(q._id) === String(id) ? { ...q, status: normalized } : q))
+    );
 
     try {
       const updated = await apiPatch<QuestionWithSubject & { pointsEarnedNow?: number }>(
@@ -258,7 +255,7 @@ export default function QuestionsPage() {
       );
       setQuestions((prev) =>
         prev.map((q) =>
-          q._id === id
+          String(q._id) === String(id)
             ? {
                 ...q,
                 status: normalizeQuestionStatus(updated.status ?? normalized),
@@ -272,7 +269,7 @@ export default function QuestionsPage() {
       }
     } catch (err) {
       setQuestions((prev) =>
-        prev.map((q) => (q._id === id ? { ...q, status: previousStatus! } : q))
+        prev.map((q) => (String(q._id) === String(id) ? { ...q, status: previousStatus } : q))
       );
       toast.error(getErrorMessage(err, "Failed to update question"));
     }
