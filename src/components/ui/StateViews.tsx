@@ -378,7 +378,7 @@ export function LoadingState({ message = "Loading..." }: { message?: string }) {
 export function LoadingOverlay({ label = "Loading" }: { label?: string }) {
   return (
     <div
-      className="absolute inset-0 z-10 flex items-start justify-center rounded-2xl bg-[var(--background)]/40 pt-16 backdrop-blur-[1px]"
+      className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-[var(--background)]/40 backdrop-blur-[1px]"
       role="status"
       aria-live="polite"
       aria-label={label}
