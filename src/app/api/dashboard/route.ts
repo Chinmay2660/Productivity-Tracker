@@ -87,8 +87,8 @@ export async function GET(request: Request) {
         ? await QuestionProgress.find({
             userId: { $in: memberIds },
             questionId: { $in: groupQuestions.map((q) => q._id) },
-            // Only "done" rows count toward the group stats, so skip the rest.
-            status: "done",
+            // Only completed rows count toward the group stats ("revised" counts as done), so skip the rest.
+            status: { $in: ["done", "revised"] },
           })
             .select("userId questionId status")
             .lean()

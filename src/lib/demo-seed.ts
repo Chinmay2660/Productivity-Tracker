@@ -12,6 +12,7 @@ import MockInterviewSession from "@/models/MockInterviewSession";
 import MockInterviewSlot from "@/models/MockInterviewSlot";
 import MockInterviewRound from "@/models/MockInterviewRound";
 import StudySession from "@/models/StudySession";
+import GroupNote from "@/models/GroupNote";
 import PreparationPlan from "@/models/PreparationPlan";
 import {
   addIstDays,
@@ -275,6 +276,100 @@ async function ensureMemberDoneQuestions(
   }
 }
 
+/**
+ * How many days ago each demo member completed questions (index 0 = the demo user, then the
+ * three teammates). Chosen so the momentum panel shows variety: an active streak, someone
+ * going quiet, and someone away. Rows beyond the pattern are dated well outside this week.
+ */
+const DEMO_ACTIVITY_DAYS_AGO: number[][] = [
+  [0, 0, 1, 2, 3, 0, 1],
+  [0, 0, 0, 1, 4, 1],
+  [3, 3, 6, 6],
+  [9, 10, 12, 14],
+];
+const DEMO_STUDY_STREAKS = [12, 9, 4, 0];
+
+/**
+ * Runs on every demo login, so the activity and notes always look recent. Must run after
+ * syncDemoMockInterviews, which stamps some questions as done today.
+ */
+async function syncDemoMomentum(
+  groupId: mongoose.Types.ObjectId,
+  guestId: mongoose.Types.ObjectId,
+  memberIds: mongoose.Types.ObjectId[],
+  questions: InstanceType<typeof PracticeQuestion>[]
+) {
+  const everyone = [guestId, ...memberIds];
+  const questionIds = questions.map((q) => q._id);
+  const now = Date.now();
+  const DAY = 86_400_000;
+
+  for (const [i, userId] of everyone.entries()) {
+    const pattern = DEMO_ACTIVITY_DAYS_AGO[i] ?? [];
+    const rows = await QuestionProgress.find({
+      userId,
+      questionId: { $in: questionIds },
+      status: { $in: ["done", "revised"] },
+    })
+      .sort({ questionId: 1 })
+      .select("_id")
+      .lean();
+    if (rows.length > 0) {
+      await QuestionProgress.bulkWrite(
+        rows.map((row, j) => {
+          const daysAgo = j < pattern.length ? pattern[j] : 15 + (j % 20);
+          // Seconds apart on "today" so it never slips into yesterday; hours apart on older days.
+          const offsetMs = daysAgo === 0 ? (j % 5) * 1000 + 30_000 : daysAgo * DAY + (j % 5) * 3_600_000;
+          return { updateOne: { filter: { _id: row._id }, update: { $set: { lastPracticed: new Date(now - offsetMs) } } } };
+        })
+      );
+    }
+    await User.updateOne({ _id: userId }, { studyStreak: DEMO_STUDY_STREAKS[i] ?? 0 });
+  }
+
+  // Focus sessions for the teammates, on the same days they practised.
+  await StudySession.deleteMany({ groupId, userId: { $in: memberIds } });
+  const sessions = memberIds.flatMap((userId, i) => {
+    const days = [...new Set((DEMO_ACTIVITY_DAYS_AGO[i + 1] ?? []).filter((d) => d <= 14))];
+    return days.map((daysAgo, k) => {
+      const minutes = 25 + ((daysAgo * 7 + k * 11) % 40);
+      const completedAt = new Date(now - (daysAgo === 0 ? 60_000 : daysAgo * DAY));
+      return {
+        userId,
+        groupId,
+        durationMinutes: minutes,
+        startedAt: new Date(completedAt.getTime() - minutes * 60_000),
+        completedAt,
+      };
+    });
+  });
+  if (sessions.length > 0) await StudySession.insertMany(sessions);
+
+  // Cheers and a nudge. The newest two to the demo user are unread, so the
+  // dashboard inbox shows up. The demo user's own sends are older than a day (buttons enabled).
+  const [alex, priya, rahul] = memberIds;
+  const ago = (hours: number) => new Date(now - hours * 3_600_000);
+  await GroupNote.deleteMany({ groupId });
+  await GroupNote.insertMany([
+    { groupId, fromUserId: alex, toUserId: guestId, kind: "cheer", emoji: "🔥", createdAt: ago(2) },
+    { groupId, fromUserId: priya, toUserId: guestId, kind: "cheer", emoji: "🎉", createdAt: ago(5) },
+    { groupId, fromUserId: rahul, toUserId: guestId, kind: "cheer", emoji: "👏", createdAt: ago(72), readAt: ago(70) },
+    { groupId, fromUserId: guestId, toUserId: priya, kind: "cheer", emoji: "💪", createdAt: ago(30), readAt: ago(28) },
+    {
+      groupId,
+      fromUserId: guestId,
+      toUserId: rahul,
+      kind: "nudge",
+      message: "We miss you in the leaderboard. Want to knock out one question together?",
+      createdAt: ago(50),
+    },
+    { groupId, fromUserId: alex, toUserId: priya, kind: "cheer", emoji: "🎉", createdAt: ago(20), readAt: ago(18) },
+    { groupId, fromUserId: priya, toUserId: alex, kind: "cheer", emoji: "👏", createdAt: ago(28), readAt: ago(26) },
+    { groupId, fromUserId: rahul, toUserId: alex, kind: "cheer", emoji: "🔥", createdAt: ago(96), readAt: ago(90) },
+    { groupId, fromUserId: alex, toUserId: rahul, kind: "cheer", emoji: "💪", createdAt: ago(6) },
+  ]);
+}
+
 async function ensureMemberUsers(): Promise<mongoose.Types.ObjectId[]> {
   const ids: mongoose.Types.ObjectId[] = [];
   for (let i = 0; i < MEMBER_NAMES.length; i++) {
@@ -312,6 +407,8 @@ export async function ensureDemoData() {
       await syncDemoSubjectInterviewFlags(subjects);
       await ensureMemberDoneQuestions([guest._id, ...memberIds], subjects, questions);
       await syncDemoMockInterviews(guest.activeGroupId, guest._id, memberIds, subjects, questions);
+      // After the mock seeding, which marks questions done today for everyone.
+      await syncDemoMomentum(guest.activeGroupId, guest._id, memberIds, questions);
       return guest;
     }
   }
@@ -377,6 +474,8 @@ export async function ensureDemoData() {
     await syncDemoSubjectInterviewFlags(subjects);
     await ensureMemberDoneQuestions([guest._id, ...memberIds], subjects, questions);
     await syncDemoMockInterviews(groupId, guest._id, memberIds, subjects, questions);
+    // After the mock seeding, which marks questions done today for everyone.
+    await syncDemoMomentum(groupId, guest._id, memberIds, questions);
     return guest;
   }
 
@@ -583,6 +682,8 @@ export async function ensureDemoData() {
   }
 
   await syncDemoMockInterviews(groupId, guest._id, memberIds, subjects, questions);
+  // After the mock seeding, which marks questions done today for everyone.
+  await syncDemoMomentum(groupId, guest._id, memberIds, questions);
 
   return guest;
 }

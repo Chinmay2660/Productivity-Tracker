@@ -25,7 +25,7 @@ export function pointsBucket(points: number): QuestionPointBucket {
   return "zero";
 }
 
-/** Award points once on first transition to done; re-marking done does not re-score. */
+/** Award points once on first transition to done (or revised); re-marking done does not re-score. */
 export function applyFirstDonePoints(
   prevStatus: string,
   nextStatus: string,
@@ -42,7 +42,8 @@ export function applyFirstDonePoints(
   }
 
   const next = normalizeQuestionStatus(nextStatus);
-  if (next !== "done") return {};
+  // "revised" is a completed question too, so it earns the same one-time points as "done".
+  if (next !== "done" && next !== "revised") return {};
 
   const completedAt = new Date();
   const { points } = questionCompletionPoints("done", practiceDate, completedAt, completedAt);
@@ -111,7 +112,7 @@ function resolveAwardedPoints(
     return { points: 0, bucket: "pending" };
   }
 
-  if (normalized === "done" && q.lastPracticed) {
+  if ((normalized === "done" || normalized === "revised") && q.lastPracticed) {
     const { points, bucket } = questionCompletionPoints(
       q.status,
       practiceDay(q),

@@ -28,7 +28,8 @@ export async function pickMockInterviewQuestions(
 ): Promise<MockInterviewQuestion[]> {
   const doneProgress = await QuestionProgress.find({
     userId: intervieweeId,
-    status: "done",
+    // "revised" is a completed question too.
+    status: { $in: ["done", "revised"] },
   }).lean();
   const doneQuestionIds = new Set(doneProgress.map((p) => String(p.questionId)));
   const confidenceById = new Map(doneProgress.map((p) => [String(p.questionId), p.confidence]));

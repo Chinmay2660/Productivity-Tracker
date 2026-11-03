@@ -8,8 +8,6 @@ export type MemberActivity = {
   daysSinceActive: number | null;
 };
 
-export type Pairing = { subject: string; learnerId: string; mentorId: string; gap: number };
-
 const BEHIND_GAP = 20;
 const INACTIVE_DAYS = 3;
 
@@ -27,23 +25,4 @@ export function findBehind(members: MemberActivity[]) {
       return { userId: m.userId, name: m.name, reasons };
     })
     .filter((m) => m.reasons.length > 0);
-}
-
-/** For each member, pairs their weakest subject with the member strongest in it (gap of 30+ points). */
-export function suggestPairings(members: MemberActivity[]): Pairing[] {
-  const pairings: Pairing[] = [];
-  for (const learner of members) {
-    let best: Pairing | null = null;
-    for (const [subject, pct] of Object.entries(learner.bySubject)) {
-      for (const mentor of members) {
-        if (mentor.userId === learner.userId) continue;
-        const gap = (mentor.bySubject[subject] ?? 0) - pct;
-        if (gap >= 30 && (!best || gap > best.gap)) {
-          best = { subject, learnerId: learner.userId, mentorId: mentor.userId, gap };
-        }
-      }
-    }
-    if (best) pairings.push(best);
-  }
-  return pairings;
 }

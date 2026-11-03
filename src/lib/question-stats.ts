@@ -20,7 +20,7 @@ export function buildQuestionStats(questions: QuestionRow[]) {
   return bySubject;
 }
 
-/** Team-wide metric: question counts only when every member marked done. Prefer buildMemberDoneQuestionStats for per-user UI. */
+/** Team-wide metric: question counts only when every member marked done (or revised, which counts as done). Prefer buildMemberDoneQuestionStats for per-user UI. */
 export function buildGroupDoneQuestionStats(
   questions: QuestionRowWithId[],
   memberIds: string[],
@@ -32,7 +32,7 @@ export function buildGroupDoneQuestionStats(
 
   const doneCountByQuestion = new Map<string, number>();
   for (const row of progress) {
-    if (row.status !== "done") continue;
+    if (!isQuestionDone(row.status)) continue;
     const qid = String(row.questionId);
     doneCountByQuestion.set(qid, (doneCountByQuestion.get(qid) ?? 0) + 1);
   }
