@@ -31,8 +31,8 @@ function NoteIcon({ note }: { note: Note }) {
 }
 
 function describe(note: Note) {
-  if (note.kind === "cheer") return `${note.fromName} cheered you on`;
-  return `${note.fromName} sent you a nudge`;
+  if (note.kind === "cheer") return `${note.fromName} is cheering for you 🎉`;
+  return `${note.fromName} gave you a gentle nudge`;
 }
 
 /**
@@ -91,7 +91,7 @@ export default function NotesInbox({
   return (
     <Card className={compact ? "border border-brand/30 bg-brand/5" : undefined}>
       <CardHeader
-        title={compact ? "Your team is rooting for you" : "For you"}
+        title={compact ? "Your team's got your back" : "For you"}
         subtitle={unread.length ? `${unread.length} new` : "All caught up"}
         action={
           unread.length > 0 ? (
