@@ -17,7 +17,7 @@ import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import { GroupDetailSkeleton, ErrorState } from "@/components/ui/StateViews";
 import InviteCodeBlock from "@/components/groups/InviteCodeBlock";
-import GroupDynamicsPanel from "@/components/groups/GroupDynamicsPanel";
+import GroupMomentumPanel from "@/components/groups/GroupMomentumPanel";
 import GroupGamificationPanel from "@/components/groups/GroupGamificationPanel";
 import { useGroupHeaderActions } from "@/components/groups/GroupShell";
 import QuestionListView from "@/components/questions/QuestionListView";
@@ -472,7 +472,7 @@ export default function GroupDetailPage() {
         </div>
       </Card>
 
-      <GroupDynamicsPanel groupId={group._id} />
+      <GroupMomentumPanel groupId={group._id} />
 
       {group.gamification && <GroupGamificationPanel gamification={group.gamification} />}
 

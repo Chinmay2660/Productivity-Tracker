@@ -61,7 +61,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         ) {
           progressUpdates.nextReviewAt = firstReviewDate();
         }
-        if (nextStatus === "done") {
+        if (nextStatus === "done" || nextStatus === "revised") {
           const award = applyFirstDonePoints(
             prevStatus,
             nextStatus,

@@ -157,7 +157,7 @@ export async function countQuestionsDoneBatch(
   const match: Record<string, unknown> = {
     userId: { $in: memberIds.map((id) => new mongoose.Types.ObjectId(id)) },
     questionId: { $in: questionIds },
-    status: "done",
+    status: { $in: ["done", "revised"] },
   };
   if (until) {
     match.lastPracticed = { $lte: until };

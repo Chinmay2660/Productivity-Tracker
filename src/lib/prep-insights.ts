@@ -8,6 +8,7 @@ import { getTodayQuestionsForUser } from "@/lib/services";
 import { NATIVE_PERSONAL_QUESTION_FILTER } from "@/lib/practice-question-filters";
 import { buildDailyPlan, planModeCopy } from "@/lib/daily-plan";
 import { normalizeQuestionStatus } from "@/lib/utils";
+import { isQuestionDone } from "@/lib/analytics-questions";
 
 const CONFIDENCE_VALUE = { weak: 0.35, okay: 0.7, strong: 1 } as const;
 
@@ -73,7 +74,7 @@ export async function getPrepInsights(
     const p = progressById.get(String(q._id));
     const status = normalizeQuestionStatus(p?.status ?? "not_started");
     st.total += 1;
-    const completed = status === "done" || status === "revised";
+    const completed = isQuestionDone(status);
     if (completed) {
       st.done += 1;
       st.score += CONFIDENCE_VALUE[p?.confidence ?? "weak"];
@@ -101,7 +102,7 @@ export async function getPrepInsights(
 
   const countdown = getInterviewCountdown(group?.interviewDate);
   const pendingToday = [...today.group, ...today.personal].filter(
-    (q) => normalizeQuestionStatus(q.status) !== "done"
+    (q) => !isQuestionDone(q.status)
   ).length;
 
   const plan = buildDailyPlan({

@@ -13,6 +13,7 @@ import {
 } from "@/lib/question-points-burst";
 import { ReadinessCard } from "@/components/dashboard/CountdownBanner";
 import InspirationCard from "@/components/dashboard/InspirationCard";
+import NotesInbox from "@/components/groups/NotesInbox";
 import SmartPlanCard from "@/components/dashboard/SmartPlanCard";
 import { usePrepInsights } from "@/lib/use-prep-insights";
 import TodayPlanCard from "@/components/dashboard/TodayPlanCard";
@@ -206,6 +207,8 @@ export default function DashboardPage() {
           <p className="text-sm text-[var(--muted)]">No group members yet.</p>
         )}
       </Card>
+
+      <NotesInbox groupId={user!.activeGroupId!} compact />
 
       <SmartPlanCard insights={insights} />
 
