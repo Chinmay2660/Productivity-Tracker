@@ -254,7 +254,7 @@ export default function SettingsPage() {
                 <Copy className="mr-1.5 h-3.5 w-3.5" />
                 Copy
               </Button>
-              <Button variant="ghost" size="sm" onClick={regenerateCode} disabled={regenerating}>
+              <Button variant="ghost" size="sm" onClick={regenerateCode} loading={regenerating}>
                 {regenerating ? "Generating…" : "New code"}
               </Button>
             </div>
@@ -264,7 +264,7 @@ export default function SettingsPage() {
             <p className="text-sm text-[var(--muted)]">
               Generate a fresh code if you need to sign in elsewhere or lost yours.
             </p>
-            <Button variant="outline" size="sm" onClick={regenerateCode} disabled={regenerating}>
+            <Button variant="outline" size="sm" onClick={regenerateCode} loading={regenerating}>
               {regenerating ? "Generating…" : "Generate login code"}
             </Button>
           </div>
@@ -403,7 +403,7 @@ export default function SettingsPage() {
             <Button variant="ghost" size="sm" onClick={revertSettings} disabled={saving}>
               Revert
             </Button>
-            <Button size="sm" onClick={saveSettings} disabled={saving} className="min-w-[6.5rem]">
+            <Button size="sm" onClick={saveSettings} loading={saving} className="min-w-[6.5rem]">
               {saving ? "Saving…" : "Save"}
             </Button>
           </div>

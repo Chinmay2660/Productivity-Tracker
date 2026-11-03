@@ -87,7 +87,11 @@ export async function GET(request: Request) {
         ? await QuestionProgress.find({
             userId: { $in: memberIds },
             questionId: { $in: groupQuestions.map((q) => q._id) },
-          }).lean()
+            // Only "done" rows count toward the group stats, so skip the rest.
+            status: "done",
+          })
+            .select("userId questionId status")
+            .lean()
         : [];
 
     const activeSubjectIds = new Set(subjects.map((s) => String(s._id)));

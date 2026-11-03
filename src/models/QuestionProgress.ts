@@ -9,6 +9,10 @@ export interface IQuestionProgress extends Document {
   firstCompletedAt?: Date;
   pointsAwarded?: number;
   notes?: string;
+  reviewCount?: number;
+  nextReviewAt?: Date;
+  lastReviewedAt?: Date;
+  lastTimeSpentSec?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -27,11 +31,16 @@ const QuestionProgressSchema = new Schema<IQuestionProgress>(
     firstCompletedAt: { type: Date },
     pointsAwarded: { type: Number, min: 0 },
     notes: { type: String, trim: true },
+    reviewCount: { type: Number, min: 0, default: 0 },
+    nextReviewAt: { type: Date },
+    lastReviewedAt: { type: Date },
+    lastTimeSpentSec: { type: Number, min: 0 },
   },
   { timestamps: true }
 );
 
 QuestionProgressSchema.index({ userId: 1, questionId: 1 }, { unique: true });
+QuestionProgressSchema.index({ userId: 1, nextReviewAt: 1 });
 
 const QuestionProgress: Model<IQuestionProgress> =
   mongoose.models.QuestionProgress ||

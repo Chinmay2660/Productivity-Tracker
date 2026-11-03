@@ -17,6 +17,7 @@ import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import { GroupDetailSkeleton, ErrorState } from "@/components/ui/StateViews";
 import InviteCodeBlock from "@/components/groups/InviteCodeBlock";
+import GroupDynamicsPanel from "@/components/groups/GroupDynamicsPanel";
 import GroupGamificationPanel from "@/components/groups/GroupGamificationPanel";
 import { useGroupHeaderActions } from "@/components/groups/GroupShell";
 import QuestionListView from "@/components/questions/QuestionListView";
@@ -100,7 +101,7 @@ export default function GroupDetailPage() {
   const [groupQuestions, setGroupQuestions] = useState<GroupQuestion[]>([]);
   const [questionTotal, setQuestionTotal] = useState(0);
   const [questionPage, setQuestionPage] = useState(1);
-  const [questionsLoading, setQuestionsLoading] = useState(false);
+  const [questionsLoading, setQuestionsLoading] = useState(true);
   const [questionSortBy, setQuestionSortBy] = useState<QuestionSortField>(
     DEFAULT_QUESTION_TABLE_SORT.sortBy
   );
@@ -471,6 +472,8 @@ export default function GroupDetailPage() {
         </div>
       </Card>
 
+      <GroupDynamicsPanel groupId={group._id} />
+
       {group.gamification && <GroupGamificationPanel gamification={group.gamification} />}
 
       <Card className="!p-4">
@@ -639,7 +642,8 @@ export default function GroupDetailPage() {
               <Button
                 size="sm"
                 onClick={saveGroup}
-                disabled={savingGroup || !editName.trim()}
+                loading={savingGroup}
+                disabled={!editName.trim()}
               >
                 {savingGroup ? "Saving…" : "Save changes"}
               </Button>
@@ -669,7 +673,8 @@ export default function GroupDetailPage() {
                   variant="outline"
                   size="sm"
                   className="shrink-0 sm:w-auto"
-                  disabled={!transferTargetId || transferring}
+                  loading={transferring}
+                  disabled={!transferTargetId}
                   onClick={transferOwnership}
                 >
                   {transferring ? "Transferring…" : "Transfer"}
@@ -690,7 +695,7 @@ export default function GroupDetailPage() {
               <Button
                 variant="danger"
                 size="sm"
-                disabled={deletingGroup}
+                loading={deletingGroup}
                 onClick={async () => {
                   const ok = await confirm({
                     title: "Delete group?",

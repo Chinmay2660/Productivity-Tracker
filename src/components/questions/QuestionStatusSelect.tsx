@@ -24,7 +24,7 @@ export default function QuestionStatusSelect({
       onChange={(e) => onChange(e.target.value as QuestionStatus)}
       onClick={(e) => e.stopPropagation()}
       className={clsx(
-        "question-status-select cursor-pointer rounded-full px-2.5 py-1 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-brand/40",
+        "question-status-select cursor-pointer rounded-full py-1 pl-2.5 pr-7 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-brand/40",
         `qs-${status}`,
         className
       )}

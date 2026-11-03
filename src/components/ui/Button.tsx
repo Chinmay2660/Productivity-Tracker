@@ -39,6 +39,8 @@ const SIZE: Record<Size, string> = {
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
   size?: Size;
+  /** Shows a circular spinner and disables the button. */
+  loading?: boolean;
 }
 
 export default function Button({
@@ -46,6 +48,8 @@ export default function Button({
   size = "md",
   className,
   children,
+  loading = false,
+  disabled,
   ...props
 }: ButtonProps) {
   return (
@@ -57,7 +61,15 @@ export default function Button({
         className
       )}
       {...props}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
     >
+      {loading && (
+        <span
+          className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent"
+          aria-hidden
+        />
+      )}
       {children}
     </button>
   );

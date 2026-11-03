@@ -1,4 +1,4 @@
-import type { QuestionStatus } from "@/types";
+import type { QuestionStatus, TopicStatus } from "@/types";
 import { generateAuthCode } from "@/lib/auth";
 
 export const MAX_GROUP_MEMBERS = 5;
@@ -101,24 +101,30 @@ function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
 
+// Building an Intl.DateTimeFormat is expensive and these helpers run for every row of
+// most lists and stats, so create each formatter once and reuse it.
+const IST_DATE_FORMAT = new Intl.DateTimeFormat("en-IN", {
+  timeZone: APP_TIMEZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+const IST_TIME_FORMAT = new Intl.DateTimeFormat("en-IN", {
+  timeZone: APP_TIMEZONE,
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
 export function istDateParts(date: Date): { y: number; m: number; d: number } {
-  const parts = new Intl.DateTimeFormat("en-IN", {
-    timeZone: APP_TIMEZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(date);
+  const parts = IST_DATE_FORMAT.formatToParts(date);
   const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
   return { y: get("year"), m: get("month"), d: get("day") };
 }
 
 function istTimeParts(date: Date): { h: number; min: number } {
-  const parts = new Intl.DateTimeFormat("en-IN", {
-    timeZone: APP_TIMEZONE,
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(date);
+  const parts = IST_TIME_FORMAT.formatToParts(date);
   const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
   return { h: get("hour"), min: get("minute") };
 }
@@ -354,8 +360,13 @@ export const TOPIC_STATUS_META: Record<
   learning: { label: "Learning", color: "text-blue-600", bg: "bg-blue-50", border: "border-blue-200", progress: 25 },
   practiced: { label: "Practiced", color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-200", progress: 50 },
   revised: { label: "Revised", color: "text-violet-600", bg: "bg-violet-50", border: "border-violet-200", progress: 75 },
-  interview_ready: { label: "Interview Ready", color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200", progress: 100 },
 };
+
+/** Maps the retired "interview_ready" topic status onto "revised" so older records keep counting as complete. */
+export function normalizeTopicStatus(status: string | undefined): TopicStatus {
+  if (status === "interview_ready") return "revised";
+  return (status && status in TOPIC_STATUS_META ? status : "not_started") as TopicStatus;
+}
 
 export const TASK_STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
   pending: { label: "Pending", color: "text-[var(--muted)]", bg: "bg-[var(--surface-muted)]" },
@@ -428,12 +439,21 @@ export function questionStatusSortIndex(status: string): number {
 }
 
 /** Sort key for practice date; unscheduled rows sort after all scheduled days. */
+// Sorting calls this for every comparison (n log n times), and the timezone maths is
+// slow, so remember the result per timestamp. Many rows share the same practice day.
+const dayStartCache = new Map<string, number>();
+
 export function questionPracticeDateSortKey(q: {
   practiceDate?: string;
   createdAt?: string;
 }): number {
-  if (q.practiceDate) return startOfDay(new Date(q.practiceDate)).getTime();
-  return Number.NEGATIVE_INFINITY;
+  if (!q.practiceDate) return Number.NEGATIVE_INFINITY;
+  const cached = dayStartCache.get(q.practiceDate);
+  if (cached !== undefined) return cached;
+  const key = startOfDay(new Date(q.practiceDate)).getTime();
+  if (dayStartCache.size > 5000) dayStartCache.clear();
+  dayStartCache.set(q.practiceDate, key);
+  return key;
 }
 
 export function compareQuestions<

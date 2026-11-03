@@ -22,6 +22,8 @@ export function normalizeUser(doc: unknown): User {
     studyStreak: u.studyStreak ?? 0,
     lastStudyDate: u.lastStudyDate,
     targetCtcLpa: u.targetCtcLpa,
+    targetCompany: u.targetCompany,
+    targetRole: u.targetRole,
     isGuest: u.isGuest ?? false,
     createdAt: u.createdAt ?? new Date().toISOString(),
     updatedAt: u.updatedAt ?? new Date().toISOString(),

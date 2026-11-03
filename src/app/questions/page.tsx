@@ -6,6 +6,8 @@ import { useUser } from "@/components/providers/UserProvider";
 import { apiGet, apiPost, apiPatch, apiDelete, getErrorMessage } from "@/lib/api";
 import Button from "@/components/ui/Button";
 import Chip from "@/components/ui/Chip";
+import MultiSelect from "@/components/ui/MultiSelect";
+import FormField from "@/components/ui/FormField";
 import Modal from "@/components/ui/Modal";
 import MotivationBanner from "@/components/dashboard/MotivationBanner";
 import {
@@ -37,6 +39,8 @@ import {
   type QuestionPointBurst,
 } from "@/lib/question-points-burst";
 import { canManageGroup } from "@/lib/group-roles";
+import { SlidersHorizontal, X } from "lucide-react";
+import { QUESTION_STATUS_ORDER, QUESTION_STATUS_META } from "@/lib/utils";
 import type { ContentScope, GroupRole, PracticeQuestion, QuestionStatus, Subject } from "@/types";
 
 type QuestionWithSubject = PracticeQuestion & { subjectName: string; trackLabel: string };
@@ -49,6 +53,19 @@ type PagedQuestions = {
 };
 
 const PAGE_SIZE = 10;
+const MODAL_FIELD =
+  "w-full min-w-0 rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--muted)]";
+
+function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <span className="w-20 shrink-0 text-sm font-medium text-[var(--muted)]">
+        {label}
+      </span>
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">{children}</div>
+    </div>
+  );
+}
 
 export default function QuestionsPage() {
   const { user } = useUser();
@@ -74,6 +91,47 @@ export default function QuestionsPage() {
   const [scope, setScope] = useState<ContentScope>("group");
   const [canAddGroupQuestions, setCanAddGroupQuestions] = useState(false);
   const [searchInput, setSearchInput] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+  const [scopeFilter, setScopeFilter] = useState<"all" | ContentScope>("all");
+  const [statusFilter, setStatusFilter] = useState<QuestionStatus[]>([]);
+  const [subjectFilter, setSubjectFilter] = useState<string[]>([]);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const hasDateRange = Boolean(dateFrom || dateTo);
+  const activeFilterCount =
+    (scopeFilter !== "all" ? 1 : 0) +
+    (statusFilter.length ? 1 : 0) +
+    (subjectFilter.length ? 1 : 0) +
+    (dateFrom || dateTo ? 1 : 0);
+  const [draft, setDraft] = useState<{
+    scope: "all" | ContentScope;
+    status: QuestionStatus[];
+    subject: string[];
+    from: string;
+    to: string;
+  }>({ scope: "all", status: [], subject: [], from: "", to: "" });
+  const openFilters = () => {
+    setDraft({ scope: scopeFilter, status: statusFilter, subject: subjectFilter, from: dateFrom, to: dateTo });
+    setShowFilters(true);
+  };
+  const applyFilters = () => {
+    setScopeFilter(draft.scope);
+    setStatusFilter(draft.status);
+    setSubjectFilter(draft.subject);
+    setDateFrom(draft.from);
+    setDateTo(draft.to);
+    if (draft.from || draft.to) setDatePeriod("all");
+    setPage(1);
+    setShowFilters(false);
+  };
+  const clearFilters = () => {
+    setScopeFilter("all");
+    setStatusFilter([]);
+    setSubjectFilter([]);
+    setDateFrom("");
+    setDateTo("");
+    setPage(1);
+  };
   const debouncedSearch = useDebouncedValue(searchInput, 300);
 
   const groupSubjects = useMemo(
@@ -85,8 +143,24 @@ export default function QuestionsPage() {
     [subjects]
   );
   const modalSubjects = scope === "group" ? groupSubjects : personalSubjects;
+  const trackOptions = editingId ? subjects.filter((s) => s.scope === scope) : modalSubjects;
 
   const activeGroupId = user?.activeGroupId;
+
+  // Subjects + role rarely change: fetch once per group (and after edits that need it), not per page/filter.
+  const loadMeta = useCallback(async () => {
+    if (!activeGroupId) return;
+    try {
+      const [subjectData, groupHeader] = await Promise.all([
+        apiGet<Subject[]>(`/api/subjects?groupId=${activeGroupId}&minimal=1`),
+        apiGet<{ myRole: GroupRole | null }>(`/api/groups/${activeGroupId}?view=header`),
+      ]);
+      setSubjects(subjectData);
+      setCanAddGroupQuestions(canManageGroup(groupHeader.myRole));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load questions");
+    }
+  }, [activeGroupId]);
 
   const load = useCallback(async () => {
     if (!activeGroupId) {
@@ -99,27 +173,19 @@ export default function QuestionsPage() {
       const searchQ = debouncedSearch.trim()
         ? `&search=${encodeURIComponent(debouncedSearch.trim())}`
         : "";
-      const questionUrl = `/api/practice-questions?groupId=${activeGroupId}&scope=all&page=${page}&limit=${PAGE_SIZE}&period=${datePeriod}&sortBy=${sortBy}&sortDir=${sortDir}${searchQ}`;
-
-      const [questionData, subjectData, groupHeader] = await Promise.all([
-        apiGet<PagedQuestions>(questionUrl),
-        apiGet<Subject[]>(`/api/subjects?groupId=${activeGroupId}&minimal=1`),
-        apiGet<{ myRole: GroupRole | null }>(
-          `/api/groups/${activeGroupId}?view=header`
-        ),
-      ]);
+      const questionUrl = `/api/practice-questions?groupId=${activeGroupId}&scope=${scopeFilter}${statusFilter.length ? `&status=${statusFilter.join(",")}` : ""}${subjectFilter.length ? `&subjectId=${subjectFilter.join(",")}` : ""}${dateFrom ? `&dateFrom=${dateFrom}` : ""}${dateTo ? `&dateTo=${dateTo}` : ""}&page=${page}&limit=${PAGE_SIZE}&period=${datePeriod}&sortBy=${sortBy}&sortDir=${sortDir}${searchQ}`;
+      const questionData = await apiGet<PagedQuestions>(questionUrl);
       setQuestions(questionData.items);
       setTotal(questionData.total);
-      setSubjects(subjectData);
-      setCanAddGroupQuestions(canManageGroup(groupHeader.myRole));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load questions");
     } finally {
       setLoading(false);
       setInitialLoad(false);
     }
-  }, [activeGroupId, page, datePeriod, sortBy, sortDir, debouncedSearch]);
+  }, [activeGroupId, page, datePeriod, sortBy, sortDir, debouncedSearch, scopeFilter, statusFilter, subjectFilter, dateFrom, dateTo]);
 
+  useEffect(() => { loadMeta(); }, [loadMeta]);
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
@@ -276,6 +342,7 @@ export default function QuestionsPage() {
   };
 
   const deleteQuestion = async (id: string) => {
+    setLoading(true);
     try {
       await apiDelete(`/api/practice-questions/${id}`);
       toast.success("Question deleted");
@@ -289,6 +356,7 @@ export default function QuestionsPage() {
       }
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to delete question"));
+      setLoading(false);
     }
   };
 
@@ -326,18 +394,40 @@ export default function QuestionsPage() {
       </div>
 
       <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
         <QuestionTableSearch
           value={searchInput}
           onChange={setSearchInput}
-          className="max-w-md"
+          className="max-w-md flex-1"
         />
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={openFilters}
+            aria-haspopup="dialog"
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
+            Filters{activeFilterCount ? ` (${activeFilterCount})` : ""}
+          </Button>
+          {activeFilterCount > 0 && (
+            <Button variant="ghost" size="sm" onClick={clearFilters}>
+              <X className="h-3.5 w-3.5" aria-hidden /> Clear
+            </Button>
+          )}
+        </div>
+        </div>
         <div className="flex flex-wrap gap-2">
           {QUESTION_DATE_PERIODS.map(({ id, label }) => (
             <Chip
               key={id}
               variant="brand"
-              active={datePeriod === id}
+              // A custom From/To range replaces the quick tabs, so none is highlighted while it's active.
+              active={!hasDateRange && datePeriod === id}
               onClick={() => {
+                // Picking a tab drops the custom range, otherwise the range would keep overriding it.
+                setDateFrom("");
+                setDateTo("");
                 setDatePeriod(id);
                 setPage(1);
               }}
@@ -407,121 +497,182 @@ export default function QuestionsPage() {
 
       <MotivationBanner />
 
+      <Modal open={showFilters} onClose={() => setShowFilters(false)} title="Filters" size="sm">
+        <div className="space-y-4">
+          <FilterRow label="Scope">
+            <select
+              value={draft.scope}
+              onChange={(e) => setDraft((d) => ({ ...d, scope: e.target.value as "all" | ContentScope }))}
+              className="w-full rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-1.5 text-sm text-[var(--foreground)] sm:min-w-0 sm:flex-1"
+            >
+              <option value="all">All</option>
+              <option value="group">Group</option>
+              <option value="personal">Personal</option>
+            </select>
+          </FilterRow>
+          <FilterRow label="Status">
+            <MultiSelect
+              placeholder="All statuses"
+              options={QUESTION_STATUS_ORDER.map((st) => ({ value: st, label: QUESTION_STATUS_META[st].label }))}
+              value={draft.status}
+              onChange={(next) => setDraft((d) => ({ ...d, status: next as QuestionStatus[] }))}
+            />
+          </FilterRow>
+          <FilterRow label="Track">
+            <MultiSelect
+              placeholder="All tracks"
+              options={subjects.map((sb) => ({ value: sb._id, label: sb.name }))}
+              value={draft.subject}
+              onChange={(next) => setDraft((d) => ({ ...d, subject: next }))}
+            />
+          </FilterRow>
+          <FilterRow label="Date">
+            <div className="grid w-full grid-cols-2 gap-2">
+              <label className="text-xs text-[var(--muted)]">
+                From
+                <input
+                  type="date"
+                  value={draft.from}
+                  max={draft.to || undefined}
+                  onChange={(e) => setDraft((d) => ({ ...d, from: e.target.value }))}
+                  className="mt-0.5 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                />
+              </label>
+              <label className="text-xs text-[var(--muted)]">
+                To
+                <input
+                  type="date"
+                  value={draft.to}
+                  min={draft.from || undefined}
+                  onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value }))}
+                  className="mt-0.5 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                />
+              </label>
+            </div>
+          </FilterRow>
+          <div className="flex justify-between gap-2 pt-2">
+            <Button variant="ghost" size="sm"
+              onClick={() => setDraft({ scope: "all", status: [], subject: [], from: "", to: "" })}>
+              Reset
+            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setShowFilters(false)}>Cancel</Button>
+              <Button size="sm" onClick={applyFilters}>Apply</Button>
+            </div>
+          </div>
+        </div>
+      </Modal>
+
       <Modal
         open={showModal}
         onClose={closeModal}
         title={editingId ? "Edit Question" : "Add Question"}
+        size="lg"
       >
-        <div className="space-y-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
-            <div className="min-w-0 flex-1">
-              {!editingId ? (
-                <>
-                  <label className="text-sm font-medium">Visibility</label>
-                  {canAddGroupQuestions ? (
-                    <select
-                      value={scope}
-                      onChange={(e) => setScope(e.target.value as ContentScope)}
-                      className="mt-1 w-full rounded-lg border border-[var(--input-border)] px-4 py-2 text-sm dark:border-[var(--input-border)] dark:bg-[var(--input-bg)]"
-                    >
-                      <option value="group">Group — shared with everyone</option>
-                      <option value="personal">Personal — only you</option>
-                    </select>
-                  ) : (
-                    <p className="mt-1 text-sm text-[var(--muted)]">
-                      Personal — only you (group questions require admin or co-admin)
-                    </p>
-                  )}
-                </>
-              ) : (
-                <p className="text-sm text-[var(--muted)] sm:pb-2">
-                  {scope === "group"
-                    ? "Group question — visible to everyone"
-                    : "Personal question — only you"}
-                </p>
-              )}
-            </div>
-            <div className="w-full shrink-0 sm:w-[11.5rem]">
-              <label className="text-sm font-medium">Practice date</label>
-              <input
-                type="date"
-                value={practiceDate}
-                onChange={(e) => setPracticeDate(e.target.value)}
-                className="input-date-end mt-1 w-full rounded-lg border border-[var(--input-border)] px-4 py-2 text-sm dark:border-[var(--input-border)] dark:bg-[var(--input-bg)]"
-              />
-              <p className="mt-1 text-xs text-[var(--muted)]">Leave empty to keep in All only until scheduled.</p>
-            </div>
-          </div>
-          {(editingId ? subjects.filter((s) => s.scope === scope) : modalSubjects).length === 0 ? (
-            <p className="text-sm text-[var(--muted)]">
-              No {scope} subjects yet.{" "}
-              <Link href="/subjects" className="text-brand hover:underline">Create one</Link> first.
-            </p>
-          ) : (
-            <div>
-              <label className="text-sm font-medium">Track</label>
-              <select
-                value={subjectId}
-                onChange={(e) => setSubjectId(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-[var(--input-border)] px-4 py-2 text-sm dark:border-[var(--input-border)] dark:bg-[var(--input-bg)]"
-              >
-                {(editingId ? subjects.filter((s) => s.scope === scope) : modalSubjects).map((s) => (
-                  <option key={s._id} value={s._id}>
-                    {formatSubjectTrack(s)}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          <div>
-            <label className="text-sm font-medium">Title</label>
+        <div className="space-y-5">
+          <FormField label="Title">
             <input
               type="text"
               value={questionTitle}
               onChange={(e) => setQuestionTitle(e.target.value)}
               placeholder="TCP vs UDP"
-              className="mt-1 w-full rounded-lg border border-[var(--input-border)] px-4 py-2 text-sm dark:border-[var(--input-border)] dark:bg-[var(--input-bg)]"
+              className={MODAL_FIELD}
+              autoFocus
             />
-          </div>
-          <div>
-            <label className="text-sm font-medium">Description</label>
+          </FormField>
+          <FormField label="Description">
             <textarea
               value={questionDescription}
               onChange={(e) => setQuestionDescription(e.target.value)}
               placeholder="Explain connection-oriented vs connectionless delivery, use cases, and trade-offs."
               rows={3}
-              className="mt-1 w-full rounded-lg border border-[var(--input-border)] px-4 py-2 text-sm dark:border-[var(--input-border)] dark:bg-[var(--input-bg)]"
+              className={MODAL_FIELD}
             />
+          </FormField>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField label="Track">
+              {trackOptions.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-[var(--border)] px-3 py-2 text-sm text-[var(--muted)]">
+                  No {scope} tracks yet.{" "}
+                  <Link href="/subjects" className="text-brand hover:underline">Create one</Link>
+                </p>
+              ) : (
+                <select
+                  value={subjectId}
+                  onChange={(e) => setSubjectId(e.target.value)}
+                  className={MODAL_FIELD}
+                >
+                  {trackOptions.map((s) => (
+                    <option key={s._id} value={s._id}>
+                      {formatSubjectTrack(s)}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </FormField>
+            <FormField
+              label="Visibility"
+              hint={
+                !editingId && !canAddGroupQuestions
+                  ? "Group questions require admin or co-admin."
+                  : undefined
+              }
+            >
+              {!editingId && canAddGroupQuestions ? (
+                <select
+                  value={scope}
+                  onChange={(e) => setScope(e.target.value as ContentScope)}
+                  className={MODAL_FIELD}
+                >
+                  <option value="group">Group — shared with everyone</option>
+                  <option value="personal">Personal — only you</option>
+                </select>
+              ) : (
+                <div className={`${MODAL_FIELD} flex items-center text-[var(--muted)]`}>
+                  {scope === "group" ? "Group — shared with everyone" : "Personal — only you"}
+                </div>
+              )}
+            </FormField>
           </div>
-          <div>
-            <label className="text-sm font-medium">Link (optional)</label>
-            <input
-              type="url"
-              value={link}
-              onChange={(e) => setLink(e.target.value)}
-              placeholder="https://..."
-              className="mt-1 w-full rounded-lg border border-[var(--input-border)] px-4 py-2 text-sm dark:border-[var(--input-border)] dark:bg-[var(--input-bg)]"
-            />
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField label="Practice date" hint="Leave empty to keep in All only until scheduled.">
+              <input
+                type="date"
+                value={practiceDate}
+                onChange={(e) => setPracticeDate(e.target.value)}
+                className={`${MODAL_FIELD} input-date-end`}
+              />
+            </FormField>
+            <FormField label="Link (optional)">
+              <input
+                type="url"
+                value={link}
+                onChange={(e) => setLink(e.target.value)}
+                placeholder="https://..."
+                className={MODAL_FIELD}
+              />
+            </FormField>
           </div>
+
           {!editingId && (
             <p className="text-xs text-[var(--muted)]">
               New questions start as <strong>Not Started</strong>. Use <strong>Add to do</strong> to queue one in Tasks.
             </p>
           )}
-          <Button
-            onClick={saveQuestion}
-            className="w-full"
-            disabled={
-              saving ||
-              !questionTitle.trim() ||
-              !subjectId ||
-              (editingId
-                ? subjects.filter((s) => s.scope === scope).length === 0
-                : modalSubjects.length === 0)
-            }
-          >
-            {saving ? "Saving…" : editingId ? "Save Changes" : "Save Question"}
-          </Button>
+          <div className="flex justify-end gap-2 border-t border-[var(--border)] pt-4">
+            <Button variant="ghost" onClick={closeModal} disabled={saving}>
+              Cancel
+            </Button>
+            <Button
+              onClick={saveQuestion}
+              loading={saving}
+              disabled={!questionTitle.trim() || !subjectId || trackOptions.length === 0}
+            >
+              {saving ? "Saving…" : editingId ? "Save Changes" : "Save Question"}
+            </Button>
+          </div>
         </div>
       </Modal>
     </div>

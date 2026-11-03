@@ -2,7 +2,7 @@ export type ThemePreference = "light" | "dark" | "system";
 export type PreparationLevel = "beginner" | "intermediate" | "advanced";
 export type GroupRole = "owner" | "admin" | "member";
 export type Priority = "critical" | "high" | "medium" | "low";
-export type TopicStatus = "not_started" | "learning" | "practiced" | "revised" | "interview_ready";
+export type TopicStatus = "not_started" | "learning" | "practiced" | "revised";
 export type Confidence = "weak" | "okay" | "strong";
 export type TaskStatus = "pending" | "in_progress" | "completed";
 export type QuestionStatus =
@@ -30,6 +30,8 @@ export interface User {
   studyStreak: number;
   lastStudyDate?: string;
   targetCtcLpa?: number;
+  targetCompany?: string;
+  targetRole?: string;
   isGuest?: boolean;
   createdAt: string;
   updatedAt: string;
@@ -150,6 +152,8 @@ export interface MockInterviewScore {
   interviewerName?: string;
   score: number;
   weaknesses: string[];
+  feedback?: string;
+  rubric?: { communication: number; correctness: number; depth: number; confidence: number };
 }
 
 export interface MockInterviewSession {
@@ -213,6 +217,7 @@ export interface MockInterview {
   strengths: string[];
   weaknesses: string[];
   feedback?: string;
+  rubric?: { communication: number; correctness: number; depth: number; confidence: number };
   followUpTopicIds: string[];
   createdAt: string;
   updatedAt: string;
@@ -341,6 +346,26 @@ export interface UserProfile {
   weakSubjects: string[];
   strongSubjects: string[];
   joinedAt?: string;
+  role?: string;
+  isSelf?: boolean;
+  stats?: {
+    questionsDone: number;
+    questionsTotal: number;
+    points: number;
+    doneLast7Days: number;
+    daysSinceActive: number | null;
+    studyMinutesWeek: number;
+    studyMinutesTotal: number;
+  } | null;
+  subjects?: { name: string; mastery: number; done: number; total: number }[];
+  mock?: {
+    count: number;
+    avgScore: number | null;
+    last: { date: string; score: number }[];
+    rubric: Record<string, number | null>;
+  } | null;
+  interview?: { date: string; daysLeft: number } | null;
+  target?: { company?: string; role?: string } | null;
 }
 
 export interface TodayQuestion {

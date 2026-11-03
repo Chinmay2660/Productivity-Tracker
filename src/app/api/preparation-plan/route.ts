@@ -23,9 +23,11 @@ export async function GET(request: Request) {
 
     let planDoc = await PreparationPlan.findOne({ userId, groupId }).lean();
     if (!planDoc) {
-      const user = await User.findById(userId).lean();
-      const subjects = await Subject.find({ groupId, isActive: true }).lean();
-      const topics = await Topic.find({ groupId }).lean();
+      const [user, subjects, topics] = await Promise.all([
+        User.findById(userId).lean(),
+        Subject.find({ groupId, isActive: true }).lean(),
+        Topic.find({ groupId }).lean(),
+      ]);
 
       const subjectWithTopics = subjects.map((s) => ({
         _id: String(s._id),
@@ -102,9 +104,11 @@ export async function POST(request: Request) {
 
     await PreparationPlan.deleteOne({ userId, groupId });
 
-    const user = await User.findById(userId).lean();
-    const subjects = await Subject.find({ groupId, isActive: true }).lean();
-    const topics = await Topic.find({ groupId }).lean();
+    const [user, subjects, topics] = await Promise.all([
+      User.findById(userId).lean(),
+      Subject.find({ groupId, isActive: true }).lean(),
+      Topic.find({ groupId }).lean(),
+    ]);
 
     const subjectWithTopics = subjects.map((s) => ({
       _id: String(s._id),

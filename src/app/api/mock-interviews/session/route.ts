@@ -74,6 +74,8 @@ export const GET = withAuth(async (request, { userId }) => {
           : s.interviewer,
         score: s.score,
         weaknesses: s.weaknesses,
+        rubric: s.rubric,
+        feedback: s.feedback,
       })),
       expectedScorers,
       currentUserHasScored: scores.some((s) => String(s.interviewerId) === userId),

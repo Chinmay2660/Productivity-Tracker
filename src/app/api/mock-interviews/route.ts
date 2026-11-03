@@ -10,6 +10,19 @@ import TopicProgress from "@/models/TopicProgress";
 import Group from "@/models/Group";
 import User from "@/models/User";
 
+const RUBRIC_KEYS = ["communication", "correctness", "depth", "confidence"] as const;
+
+function cleanRubric(input: unknown) {
+  if (!input || typeof input !== "object") return undefined;
+  const out: Record<string, number> = {};
+  for (const key of RUBRIC_KEYS) {
+    const v = Number((input as Record<string, unknown>)[key]);
+    if (!Number.isFinite(v)) return undefined;
+    out[key] = Math.min(5, Math.max(1, Math.round(v)));
+  }
+  return out;
+}
+
 export const GET = withAuth(async (request, { userId }) => {
   const { searchParams } = new URL(request.url);
   const groupId = searchParams.get("groupId");
@@ -18,7 +31,9 @@ export const GET = withAuth(async (request, { userId }) => {
   if (groupId) filter.groupId = groupId;
 
   const interviews = await MockInterview.find(filter).sort({ date: -1 }).lean();
-  const subjects = await Subject.find({ _id: { $in: interviews.map((i) => i.subjectId).filter(Boolean) } }).lean();
+  const subjects = await Subject.find({ _id: { $in: interviews.map((i) => i.subjectId).filter(Boolean) } })
+    .select("_id name")
+    .lean();
   const subjectMap = new Map(subjects.map((s) => [String(s._id), s.name]));
 
   return jsonOk(
@@ -42,6 +57,7 @@ export const POST = withAuth(async (request, { userId: authUserId }) => {
     strengths,
     weaknesses,
     feedback,
+    rubric,
     followUpTopicIds,
   } = body;
 
@@ -101,6 +117,7 @@ export const POST = withAuth(async (request, { userId: authUserId }) => {
       strengths: strengths ?? [],
       weaknesses: weaknesses ?? [],
       feedback,
+      rubric: cleanRubric(rubric),
       followUpTopicIds: followUpTopicIds ?? sessionTopicIds,
     });
   } catch (err) {

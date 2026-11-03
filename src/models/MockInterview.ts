@@ -13,6 +13,7 @@ export interface IMockInterview extends Document {
   strengths: string[];
   weaknesses: string[];
   feedback?: string;
+  rubric?: { communication: number; correctness: number; depth: number; confidence: number };
   followUpTopicIds: mongoose.Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
@@ -32,6 +33,12 @@ const MockInterviewSchema = new Schema<IMockInterview>(
     strengths: [{ type: String }],
     weaknesses: [{ type: String }],
     feedback: { type: String, trim: true },
+    rubric: {
+      communication: { type: Number, min: 1, max: 5 },
+      correctness: { type: Number, min: 1, max: 5 },
+      depth: { type: Number, min: 1, max: 5 },
+      confidence: { type: Number, min: 1, max: 5 },
+    },
     followUpTopicIds: [{ type: Schema.Types.ObjectId, ref: "Topic" }],
   },
   { timestamps: true }

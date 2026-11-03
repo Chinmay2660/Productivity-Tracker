@@ -13,7 +13,7 @@ import MockInterviewSlot from "@/models/MockInterviewSlot";
 import MockInterviewRound from "@/models/MockInterviewRound";
 import StudySession from "@/models/StudySession";
 import PreparationPlan from "@/models/PreparationPlan";
-import type { Confidence, GroupRole, TopicStatus } from "@/types";
+import type { Confidence, GroupRole } from "@/types";
 import { canManageGroup } from "@/lib/group-roles";
 
 export { canManageGroup };
@@ -27,6 +27,7 @@ import {
   questionDatePeriodRange,
   serializeDoc,
   startOfDay,
+  normalizeTopicStatus,
 } from "./utils";
 import { questionProgressFields, questionStatusForUser } from "./question-progress";
 import { NATIVE_PERSONAL_QUESTION_FILTER } from "./practice-question-filters";
@@ -162,7 +163,7 @@ function memberStatsFromContext(
     const topicData = ctx.topics.map((t) => {
       const p = progressMap.get(String(t._id));
       return {
-        status: (p?.status ?? t.status) as TopicStatus,
+        status: normalizeTopicStatus(p?.status ?? t.status),
         confidence: (p?.confidence ?? t.confidence) as Confidence,
       };
     });
@@ -228,7 +229,7 @@ export async function getUserReadiness(userId: string, groupId: string): Promise
   const topicData = topics.map((t) => {
     const p = progressMap.get(String(t._id));
     return {
-      status: (p?.status ?? t.status) as TopicStatus,
+      status: normalizeTopicStatus(p?.status ?? t.status),
       confidence: (p?.confidence ?? t.confidence) as Confidence,
     };
   });
@@ -327,6 +328,29 @@ type QuestionTodoSource = {
   link?: string;
 };
 
+/** The upsert that creates (or refreshes) the to-do task for a question marked "add to todo". */
+function todoTaskUpsert(userId: mongoose.Types.ObjectId, question: QuestionTodoSource) {
+  return {
+    filter: { userId, questionId: question._id },
+    update: {
+      $setOnInsert: {
+        groupId: question.groupId,
+        userId,
+        questionId: question._id,
+        priority: "medium" as const,
+        estimatedMinutes: 30,
+        status: "pending" as const,
+      },
+      $set: {
+        title: questionTaskTitle(question.content),
+        subjectId: question.subjectId,
+        topicId: question.topicId,
+        description: question.link?.trim() || undefined,
+      },
+    },
+  };
+}
+
 export async function syncQuestionTodoTask(
   userId: string,
   question: QuestionTodoSource,
@@ -335,58 +359,71 @@ export async function syncQuestionTodoTask(
   const uid = new mongoose.Types.ObjectId(userId);
 
   if (status === "add_to_todo") {
-    await PrepTask.findOneAndUpdate(
-      { userId: uid, questionId: question._id },
-      {
-        $setOnInsert: {
-          groupId: question.groupId,
-          userId: uid,
-          questionId: question._id,
-          priority: "medium",
-          estimatedMinutes: 30,
-          status: "pending",
-        },
-        $set: {
-          title: questionTaskTitle(question.content),
-          subjectId: question.subjectId,
-          topicId: question.topicId,
-          description: question.link?.trim() || undefined,
-        },
-      },
-      { upsert: true }
-    );
+    const { filter, update } = todoTaskUpsert(uid, question);
+    await PrepTask.findOneAndUpdate(filter, update, { upsert: true });
     return;
   }
 
   await PrepTask.deleteOne({ userId: uid, questionId: question._id });
 }
 
+/**
+ * Makes sure every "add to todo" question has a task. Runs on each tasks-page load, so it
+ * only reads the questions it needs and writes only the tasks that are missing or stale.
+ */
 export async function ensureQuestionTodoTasks(userId: string, groupId: string) {
   const gid = new mongoose.Types.ObjectId(groupId);
   const uid = new mongoose.Types.ObjectId(userId);
 
-  const [groupQuestions, progress, personalQuestions] = await Promise.all([
-    PracticeQuestion.find({ groupId: gid, scope: "group" }).lean(),
-    QuestionProgress.find({ userId: uid, status: "add_to_todo" }).lean(),
+  const [progress, personalQuestions] = await Promise.all([
+    QuestionProgress.find({ userId: uid, status: "add_to_todo" }).select("questionId").lean(),
     PracticeQuestion.find({
       userId: uid,
       groupId: gid,
       scope: "personal",
       status: "add_to_todo",
       ...NATIVE_PERSONAL_QUESTION_FILTER,
-    }).lean(),
+    })
+      .select("_id groupId subjectId topicId content link")
+      .lean(),
   ]);
 
-  const groupById = new Map(groupQuestions.map((q) => [String(q._id), q]));
+  const groupQuestions =
+    progress.length > 0
+      ? await PracticeQuestion.find({
+          _id: { $in: progress.map((p) => p.questionId) },
+          groupId: gid,
+          scope: "group",
+        })
+          .select("_id groupId subjectId topicId content link")
+          .lean()
+      : [];
 
-  for (const p of progress) {
-    const question = groupById.get(String(p.questionId));
-    if (question) await syncQuestionTodoTask(userId, question, "add_to_todo");
-  }
+  const sources: QuestionTodoSource[] = [...groupQuestions, ...personalQuestions];
+  if (sources.length === 0) return;
 
-  for (const question of personalQuestions) {
-    await syncQuestionTodoTask(userId, question, "add_to_todo");
-  }
+  const existing = await PrepTask.find({ userId: uid, questionId: { $in: sources.map((q) => q._id) } })
+    .select("questionId title subjectId description")
+    .lean();
+  const existingByQuestion = new Map(existing.map((t) => [String(t.questionId), t]));
+
+  const ops = sources
+    .filter((q) => {
+      const task = existingByQuestion.get(String(q._id));
+      if (!task) return true;
+      // Re-sync only when the question changed since the task was created.
+      return (
+        task.title !== questionTaskTitle(q.content) ||
+        String(task.subjectId ?? "") !== String(q.subjectId) ||
+        (task.description ?? "") !== (q.link?.trim() ?? "")
+      );
+    })
+    .map((q) => {
+      const { filter, update } = todoTaskUpsert(uid, q);
+      return { updateOne: { filter, update, upsert: true } };
+    });
+
+  if (ops.length > 0) await PrepTask.bulkWrite(ops, { ordered: false });
 }
 
 export async function syncGroupProgressToPersonal(

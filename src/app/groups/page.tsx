@@ -27,6 +27,7 @@ export default function GroupsPage() {
   const { user, refreshUser } = useUser();
   const [groups, setGroups] = useState<GroupListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [joining, setJoining] = useState(false);
   const [error, setError] = useState("");
   const [showJoin, setShowJoin] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
@@ -55,6 +56,7 @@ export default function GroupsPage() {
 
   const handleJoin = async () => {
     if (joinCode.length !== 6 || !user) return;
+    setJoining(true);
     try {
       await apiPut("/api/groups/join", { code: joinCode });
       toast.success("Joined group!");
@@ -64,6 +66,8 @@ export default function GroupsPage() {
       load({ silent: true });
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to join"));
+    } finally {
+      setJoining(false);
     }
   };
 
@@ -243,7 +247,7 @@ export default function GroupsPage() {
             placeholder="123456"
             className="font-mono tracking-widest"
           />
-          <Button onClick={handleJoin} className="w-full" disabled={joinCode.length !== 6}>
+          <Button onClick={handleJoin} className="w-full" loading={joining} disabled={joinCode.length !== 6}>
             Join Group
           </Button>
         </div>
@@ -277,7 +281,8 @@ export default function GroupsPage() {
           <Button
             onClick={handleCreate}
             className="w-full"
-            disabled={creating || !createName.trim()}
+            loading={creating}
+            disabled={!createName.trim()}
           >
             {creating ? "Creating…" : "Create Group"}
           </Button>

@@ -47,7 +47,12 @@ export async function GET(request: Request) {
     await connectToDatabase();
     const { searchParams } = new URL(request.url);
     const groupId = searchParams.get("groupId");
-    const subjectId = searchParams.get("subjectId");
+    const subjectIds = (searchParams.get("subjectId") ?? "")
+      .split(",")
+      .map((v) => v.trim())
+      .filter((v) => mongoose.isValidObjectId(v));
+    const dateFrom = searchParams.get("dateFrom");
+    const dateTo = searchParams.get("dateTo");
     const topicId = searchParams.get("topicId");
     const date = searchParams.get("date");
     const period = searchParams.get("period") as QuestionDatePeriod | null;
@@ -55,7 +60,17 @@ export async function GET(request: Request) {
 
     if (!groupId) return jsonError("groupId is required");
 
-    const group = await Group.findById(groupId).lean();
+    const [group, subjects] = await Promise.all([
+      Group.findById(groupId).select("_id members createdBy").lean(),
+      Subject.find({
+        $or: [
+          { groupId, scope: "group", isActive: true },
+          { userId, scope: "personal", isActive: true },
+        ],
+      })
+        .select("_id name totalQuestions contentUnit")
+        .lean(),
+    ]);
     if (!group || !isGroupMember(group, userId)) {
       return jsonError("Not a member of this group", 403);
     }
@@ -75,11 +90,21 @@ export async function GET(request: Request) {
 
     const questionFilter: Record<string, unknown> =
       filters.length === 1 ? filters[0] : { $or: filters };
-    if (subjectId) questionFilter.subjectId = subjectId;
+    if (subjectIds.length === 1) questionFilter.subjectId = subjectIds[0];
+    else if (subjectIds.length > 1) questionFilter.subjectId = { $in: subjectIds };
     if (topicId) questionFilter.topicId = topicId;
 
+    const customRange =
+      dateFrom || dateTo
+        ? {
+            start: dateFrom ? parseDateInput(dateFrom) : new Date(0),
+            // dateTo is inclusive, so the range ends at the start of the next day.
+            end: dateTo ? addIstDays(parseDateInput(dateTo), 1) : new Date(8.64e15),
+          }
+        : null;
     const periodRange =
-      period && period !== "all" ? questionDatePeriodRange(period) : date ? dayRange(date) : null;
+      customRange ??
+      (period && period !== "all" ? questionDatePeriodRange(period) : date ? dayRange(date) : null);
 
     if (periodRange) {
       const { start, end } = periodRange;
@@ -110,13 +135,20 @@ export async function GET(request: Request) {
         ? sortDirParam
         : DEFAULT_QUESTION_TABLE_SORT.sortDir;
     const searchTerm = searchParams.get("search")?.trim() ?? "";
-
-    const subjects = await Subject.find({
-      $or: [
-        { groupId, scope: "group", isActive: true },
-        { userId, scope: "personal", isActive: true },
-      ],
-    }).lean();
+    const statusFilter = new Set(
+      (searchParams.get("status") ?? "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map(normalizeQuestionStatus)
+    );
+    const difficultyFilter = (searchParams.get("difficulty") ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s === "easy" || s === "medium" || s === "hard");
+    if (difficultyFilter.length > 0) {
+      questionFilter.difficulty = { $in: difficultyFilter };
+    }
 
     const activeSubjectIds = subjects.map((s) => s._id);
     if (activeSubjectIds.length === 0) {
@@ -191,29 +223,124 @@ export async function GET(request: Request) {
       return new Map(progressRows.map((p) => [String(p.questionId), p]));
     }
 
-    const questionFields =
-      "_id scope subjectId topicId practiceDate createdAt status confidence lastPracticed notes content link difficulty userId groupId";
+    // Sorting/progress needs every match, but the heavy `content` body is only
+    // needed for search filtering and for the rows actually returned.
+    const baseFields =
+      "_id scope subjectId topicId practiceDate createdAt status confidence lastPracticed notes difficulty userId groupId";
+    const questionFields = searchTerm ? `${baseFields} content link` : baseFields;
+
+    const subjectMap = new Map(subjects.map((s) => [String(s._id), s]));
+
+    // Fast path: date ordering needs no per-user progress, so let MongoDB sort and
+    // paginate instead of loading every match into memory.
+    if (paginate && !searchTerm && statusFilter.size === 0 && sortBy === "date") {
+      const dir = sortDir === "asc" ? 1 : -1;
+      const [total, pageDocs] = await Promise.all([
+        PracticeQuestion.countDocuments(questionFilter),
+        PracticeQuestion.find(questionFilter)
+          .select(`${baseFields} content link`)
+          .sort({ practiceDate: dir, createdAt: dir, _id: dir })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+      ]);
+      const progress = await progressForQuestions(pageDocs);
+      const items = pageDocs.map((q) => ({
+        ...mapQuestion(q, subjectMap, progress),
+        content: q.content ?? "",
+        link: q.link,
+      }));
+      return jsonOk({ items, total, page, limit });
+    }
 
     const questions = await PracticeQuestion.find(questionFilter).select(questionFields).lean();
-    const subjectMap = new Map(subjects.map((s) => [String(s._id), s]));
-    const progressMap = await progressForQuestions(questions);
-    let result = questions
-      .map((q) => mapQuestion(q, subjectMap, progressMap))
-      .sort((a, b) => compareQuestions(a, b, sortBy, sortDir));
-    if (searchTerm) {
-      result = result.filter((q) =>
-        questionMatchesSearch(
-          {
-            content: String((q as { content?: string }).content ?? ""),
-            trackLabel: q.trackLabel,
-            subjectName: q.subjectName,
+
+    // Status filtering/sorting depends on each user's progress, so that case needs every row mapped.
+    const needsProgressForAll = statusFilter.size > 0 || sortBy === "status";
+
+    let result: ReturnType<typeof mapQuestion>[];
+    let total: number;
+
+    if (needsProgressForAll) {
+      const progressMap = await progressForQuestions(questions);
+      result = questions
+        .map((q) => mapQuestion(q, subjectMap, progressMap))
+        .sort((a, b) => compareQuestions(a, b, sortBy, sortDir));
+      if (statusFilter.size > 0) {
+        result = result.filter((q) => statusFilter.has(normalizeQuestionStatus(q.status)));
+      }
+      if (searchTerm) {
+        result = result.filter((q) =>
+          questionMatchesSearch(
+            {
+              content: String((q as { content?: string }).content ?? ""),
+              trackLabel: q.trackLabel,
+              subjectName: q.subjectName,
+            },
+            searchTerm
+          )
+        );
+      }
+      total = result.length;
+      if (paginate) result = result.slice(skip, skip + limit);
+    } else {
+      // Filter and sort on small records, then build full objects (and load progress) for one page only.
+      const trackLabels = new Map<string, { label: string; name: string }>();
+      for (const [id, subject] of subjectMap) {
+        trackLabels.set(id, {
+          name: subject.name,
+          label: formatSubjectTrack({
+            name: subject.name,
+            totalQuestions: subject.totalQuestions ?? 0,
+            contentUnit: subject.contentUnit ?? "questions",
+          }),
+        });
+      }
+      const rows = questions.map((q) => {
+        const track = trackLabels.get(String(q.subjectId));
+        return {
+          q,
+          key: {
+            _id: String(q._id),
+            practiceDate: q.practiceDate?.toISOString(),
+            createdAt: new Date(q.createdAt).toISOString(),
+            status: q.status ?? "not_started",
+            scope: q.scope,
+            trackLabel: track?.label ?? "",
+            subjectName: track?.name ?? "",
           },
-          searchTerm
-        )
-      );
+        };
+      });
+      const matched = searchTerm
+        ? rows.filter(({ q, key }) =>
+            questionMatchesSearch(
+              {
+                content: String((q as { content?: string }).content ?? ""),
+                trackLabel: key.trackLabel,
+                subjectName: key.subjectName,
+              },
+              searchTerm
+            )
+          )
+        : rows;
+      matched.sort((a, b) => compareQuestions(a.key, b.key, sortBy, sortDir));
+      total = matched.length;
+      const pageRows = paginate ? matched.slice(skip, skip + limit) : matched;
+      const pageDocs = pageRows.map((r) => r.q);
+      const progressMap = await progressForQuestions(pageDocs);
+      result = pageDocs.map((q) => mapQuestion(q, subjectMap, progressMap));
     }
-    const total = result.length;
-    if (paginate) result = result.slice(skip, skip + limit);
+
+    if (!searchTerm && result.length > 0) {
+      const bodies = await PracticeQuestion.find({ _id: { $in: result.map((q) => q._id) } })
+        .select("_id content link")
+        .lean();
+      const bodyMap = new Map(bodies.map((b) => [String(b._id), b]));
+      result = result.map((q) => {
+        const b = bodyMap.get(String(q._id));
+        return { ...q, content: b?.content ?? "", link: b?.link };
+      });
+    }
 
     if (paginate) {
       return jsonOk({ items: result, total, page, limit });

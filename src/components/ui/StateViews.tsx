@@ -47,6 +47,52 @@ export function QuestionListSkeleton({ rows = 6 }: { rows?: number }) {
   );
 }
 
+/** Circular spinner. Use inside buttons or inline with text. */
+export function Spinner({ className }: { className?: string }) {
+  return (
+    <span
+      className={clsx(
+        "inline-block h-4 w-4 animate-spin rounded-full border-2 border-brand border-t-transparent",
+        className
+      )}
+      role="status"
+      aria-label="Loading"
+    />
+  );
+}
+
+/** Placeholder rows for the question table (desktop) and cards (mobile) on first load. */
+export function QuestionRowsSkeleton({ rows = 5 }: { rows?: number }) {
+  return (
+    <div role="status" aria-busy="true" aria-label="Loading questions">
+      <div className="hidden space-y-1 p-2 lg:block">
+        {Array.from({ length: rows }, (_, i) => (
+          <div key={i} className="flex items-center gap-4 rounded-xl px-4 py-3.5">
+            <Skeleton className="h-4 w-[34%]" />
+            <Skeleton className="h-6 w-24 rounded-full" />
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-4 w-28" />
+          </div>
+        ))}
+      </div>
+      <div className="space-y-3 lg:hidden">
+        {Array.from({ length: Math.min(rows, 3) }, (_, i) => (
+          <div key={i} className="space-y-3 rounded-2xl border border-[var(--border)] p-4">
+            <div className="flex items-start justify-between gap-3">
+              <Skeleton className="h-4 w-3/5" />
+              <Skeleton className="h-7 w-24 rounded-full" />
+            </div>
+            <div className="flex gap-3">
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-3 w-20" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function PageHeaderSkeleton({ withAction = false }: { withAction?: boolean }) {
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -324,6 +370,23 @@ export function LoadingState({ message = "Loading..." }: { message?: string }) {
     <div className="flex flex-col items-center justify-center py-16">
       <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand border-t-transparent" />
       <p className="mt-3 text-sm text-[var(--muted)]">{message}</p>
+    </div>
+  );
+}
+
+/** Centered spinner shown over stale content while a refetch is in flight. */
+export function LoadingOverlay({ label = "Loading" }: { label?: string }) {
+  return (
+    <div
+      className="absolute inset-0 z-10 flex items-start justify-center rounded-2xl bg-[var(--background)]/40 pt-16 backdrop-blur-[1px]"
+      role="status"
+      aria-live="polite"
+      aria-label={label}
+    >
+      <div className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--card)] px-4 py-2 text-sm text-[var(--muted)] shadow-lg">
+        <div className="h-4 w-4 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+        {label}…
+      </div>
     </div>
   );
 }

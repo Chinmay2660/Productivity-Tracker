@@ -13,6 +13,8 @@ import {
 } from "@/lib/question-points-burst";
 import { ReadinessCard } from "@/components/dashboard/CountdownBanner";
 import InspirationCard from "@/components/dashboard/InspirationCard";
+import SmartPlanCard from "@/components/dashboard/SmartPlanCard";
+import { usePrepInsights } from "@/lib/use-prep-insights";
 import TodayPlanCard from "@/components/dashboard/TodayPlanCard";
 import FocusTimer from "@/components/focus/FocusTimer";
 import Card, { CardHeader } from "@/components/ui/Card";
@@ -33,6 +35,7 @@ export default function DashboardPage() {
   const [memberPage, setMemberPage] = useState(1);
 
   const activeGroupId = user?.activeGroupId;
+  const { data: insights } = usePrepInsights(Boolean(activeGroupId));
   const memberPageItems = useMemo(
     () => sliceTablePage(data?.memberStats ?? [], memberPage, TABLE_PAGE_SIZE),
     [data?.memberStats, memberPage]
@@ -203,6 +206,8 @@ export default function DashboardPage() {
           <p className="text-sm text-[var(--muted)]">No group members yet.</p>
         )}
       </Card>
+
+      <SmartPlanCard insights={insights} />
 
       <TodayPlanCard
         todayQuestions={data.todayQuestions}

@@ -73,7 +73,7 @@ export default function InviteCodeBlock({
         variant={inline ? "ghost" : "outline"}
         size="sm"
         onClick={() => onGenerate()}
-        disabled={generating}
+        loading={generating}
         className={compact && !inline ? "w-full" : undefined}
       >
         {generating ? "Generating…" : joinCode ? "Generate code" : "Generate code"}
@@ -95,7 +95,7 @@ export default function InviteCodeBlock({
             variant="ghost"
             size="sm"
             onClick={requestNewCode}
-            disabled={generating}
+            loading={generating}
           >
             {generating ? "…" : "New"}
           </Button>
@@ -127,7 +127,7 @@ export default function InviteCodeBlock({
             variant="ghost"
             size="sm"
             onClick={requestNewCode}
-            disabled={generating}
+            loading={generating}
           >
             {generating ? "…" : "New code"}
           </Button>

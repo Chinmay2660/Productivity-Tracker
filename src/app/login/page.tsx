@@ -233,7 +233,8 @@ function LoginPanel() {
                 required
               />
             </FormField>
-            <Button type="submit" className="w-full" disabled={loading || code.length !== 6}>
+            <Button type="submit" className="w-full" loading={loading}
+              disabled={code.length !== 6}>
               {loading ? "Signing in..." : "Sign in with code"}
             </Button>
           </form>
@@ -286,7 +287,8 @@ function LoginPanel() {
               required
             />
           </FormField>
-          <Button type="submit" className="w-full" disabled={registerLoading || code.length !== 6}>
+          <Button type="submit" className="w-full" loading={registerLoading}
+            disabled={code.length !== 6}>
             {registerLoading ? "Creating..." : "Create account"}
           </Button>
         </form>

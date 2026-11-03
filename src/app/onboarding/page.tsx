@@ -10,7 +10,7 @@ import { useUser } from "@/components/providers/UserProvider";
 import toast from "react-hot-toast";
 import type { User, Group } from "@/types";
 
-const STEPS = ["Welcome", "Subjects", "Study Time", "Group"];
+const STEPS = ["Welcome", "Target", "Subjects", "Study Time", "Group"];
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -21,6 +21,9 @@ export default function OnboardingPage() {
   const [subjects, setSubjects] = useState<string[]>([]);
   const [newSubject, setNewSubject] = useState("");
   const [preparationLevel, setPreparationLevel] = useState<"beginner" | "intermediate" | "advanced">("intermediate");
+  const [targetCompany, setTargetCompany] = useState("");
+  const [targetRole, setTargetRole] = useState("");
+  const [interviewDate, setInterviewDate] = useState("");
   const [dailyStudyMinutes, setDailyStudyMinutes] = useState(120);
   const [groupAction, setGroupAction] = useState<"create" | "join">("create");
   const [groupName, setGroupName] = useState("");
@@ -49,6 +52,9 @@ export default function OnboardingPage() {
         subjects,
         preparationLevel,
         dailyStudyMinutes,
+        targetCompany: targetCompany.trim() || undefined,
+        targetRole: targetRole.trim() || undefined,
+        interviewDate: groupAction === "create" && interviewDate ? interviewDate : undefined,
         groupAction,
         groupName: groupAction === "create" ? groupName || `${name || user?.name}'s Prep Group` : undefined,
         joinCode: groupAction === "join" ? joinCode : undefined,
@@ -66,8 +72,9 @@ export default function OnboardingPage() {
   const canNext = () => {
     if (step === 0) return name.trim().length > 0;
     if (step === 1) return true;
-    if (step === 2) return dailyStudyMinutes > 0;
-    if (step === 3) return groupAction === "create" || joinCode.length === 6;
+    if (step === 2) return true;
+    if (step === 3) return dailyStudyMinutes > 0;
+    if (step === 4) return groupAction === "create" || joinCode.length === 6;
     return false;
   };
 
@@ -127,6 +134,42 @@ export default function OnboardingPage() {
 
           {step === 1 && (
             <div className="space-y-4">
+              <h2 className="text-lg font-semibold">What are you preparing for?</h2>
+              <p className="text-sm text-[var(--muted)]">
+                Your interview date drives the daily plan. All optional, and you can change it later.
+              </p>
+              <input
+                type="text"
+                value={targetCompany}
+                onChange={(e) => setTargetCompany(e.target.value)}
+                placeholder="Target company (e.g. Acme Corp)"
+                className="w-full rounded-lg border border-[var(--input-border)] px-4 py-2.5 text-sm dark:bg-[var(--input-bg)]"
+              />
+              <input
+                type="text"
+                value={targetRole}
+                onChange={(e) => setTargetRole(e.target.value)}
+                placeholder="Target role (e.g. Backend Engineer)"
+                className="w-full rounded-lg border border-[var(--input-border)] px-4 py-2.5 text-sm dark:bg-[var(--input-bg)]"
+              />
+              <div>
+                <label className="text-sm font-medium" htmlFor="interview-date">
+                  Interview date
+                </label>
+                <input
+                  id="interview-date"
+                  type="date"
+                  value={interviewDate}
+                  onChange={(e) => setInterviewDate(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-[var(--input-border)] px-4 py-2.5 text-sm dark:bg-[var(--input-bg)]"
+                />
+                <p className="mt-1 text-xs text-[var(--muted)]">Applies when you create a group. Joining uses the group&apos;s date.</p>
+              </div>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="space-y-4">
               <h2 className="text-lg font-semibold">Which subjects are you preparing?</h2>
               <p className="text-sm text-[var(--muted)]">Add your own subjects. You can add more later from the Subjects page.</p>
               <div className="flex gap-2">
@@ -167,7 +210,7 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {step === 2 && (
+          {step === 3 && (
             <div className="space-y-4">
               <h2 className="text-lg font-semibold">Daily study time available?</h2>
               <input
@@ -185,7 +228,7 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {step === 3 && (
+          {step === 4 && (
             <div className="space-y-4">
               <h2 className="text-lg font-semibold">Create or join a group</h2>
               <div className="flex gap-2">
@@ -242,7 +285,8 @@ export default function OnboardingPage() {
                 Continue
               </Button>
             ) : (
-              <Button onClick={handleFinish} disabled={!canNext() || loading}>
+              <Button onClick={handleFinish} loading={loading}
+                disabled={!canNext()}>
                 {loading ? "Setting up..." : "Launch Dashboard"}
               </Button>
             )}

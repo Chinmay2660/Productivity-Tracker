@@ -23,6 +23,7 @@ export async function POST(request: Request) {
     const {
       name, subjects, dailyStudyMinutes,
       preparationLevel, groupAction, groupName, joinCode,
+      targetCompany, targetRole, interviewDate,
     } = body;
 
     const user = await User.findById(userId);
@@ -32,6 +33,11 @@ export async function POST(request: Request) {
     if (name?.trim()) user.name = name.trim();
     user.preparationLevel = preparationLevel ?? user.preparationLevel;
     user.dailyStudyMinutes = dailyStudyMinutes ?? user.dailyStudyMinutes;
+    if (typeof targetCompany === "string" && targetCompany.trim()) user.targetCompany = targetCompany.trim().slice(0, 120);
+    if (typeof targetRole === "string" && targetRole.trim()) user.targetRole = targetRole.trim().slice(0, 120);
+    const parsedInterviewDate = interviewDate ? new Date(interviewDate) : null;
+    const validInterviewDate =
+      parsedInterviewDate && !Number.isNaN(parsedInterviewDate.getTime()) ? parsedInterviewDate : undefined;
 
     let group;
 
@@ -63,6 +69,7 @@ export async function POST(request: Request) {
         joinCodeExpiresAt: joinCodeExpiryDate(),
         ownerId: user._id,
         members: [{ userId: user._id, role: "owner", joinedAt: new Date() }],
+        ...(validInterviewDate ? { interviewDate: validInterviewDate } : {}),
       });
 
       if (subjects?.length) {
