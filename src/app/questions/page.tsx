@@ -193,10 +193,6 @@ export default function QuestionsPage() {
   }, [debouncedSearch]);
 
   useEffect(() => {
-    document.getElementById("app-main")?.scrollTo({ top: 0 });
-  }, [page]);
-
-  useEffect(() => {
     const available = scope === "group" ? groupSubjects : personalSubjects;
     if (available.length > 0 && !available.some((s) => s._id === subjectId)) {
       setSubjectId(available[0]._id);
