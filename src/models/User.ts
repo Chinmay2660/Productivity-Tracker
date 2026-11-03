@@ -15,6 +15,8 @@ export interface IUser extends Document {
   studyStreak: number;
   lastStudyDate?: Date;
   targetCtcLpa?: number;
+  targetCompany?: string;
+  targetRole?: string;
   isGuest?: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -40,6 +42,8 @@ const UserSchema = new Schema<IUser>(
     studyStreak: { type: Number, default: 0 },
     lastStudyDate: { type: Date },
     targetCtcLpa: { type: Number, min: 0 },
+    targetCompany: { type: String, trim: true, maxlength: 120 },
+    targetRole: { type: String, trim: true, maxlength: 120 },
     isGuest: { type: Boolean, default: false },
   },
   { timestamps: true }

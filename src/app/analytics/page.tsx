@@ -7,6 +7,8 @@ import { apiGet } from "@/lib/api";
 import Link from "next/link";
 import Button from "@/components/ui/Button";
 import { AnalyticsPageSkeleton, ErrorState, EmptyState } from "@/components/ui/StateViews";
+import MasteryHeatmap from "@/components/analytics/MasteryHeatmap";
+import { usePrepInsights } from "@/lib/use-prep-insights";
 import type { AnalyticsData } from "@/types";
 
 const AnalyticsCharts = dynamic(
@@ -24,6 +26,7 @@ export default function AnalyticsPage() {
   const [error, setError] = useState("");
 
   const activeGroupId = user?.activeGroupId;
+  const { data: insights } = usePrepInsights(Boolean(activeGroupId));
 
   const load = useCallback(async () => {
     if (!activeGroupId) {
@@ -68,6 +71,8 @@ export default function AnalyticsPage() {
         <h1 className="text-2xl font-bold text-[var(--foreground)]">Analytics</h1>
         <p className="mt-1 text-sm text-[var(--muted)]">A quick snapshot of your prep progress.</p>
       </div>
+
+      {insights && <MasteryHeatmap subjects={insights.subjects} />}
 
       <AnalyticsCharts data={data} currentUserId={user?._id} />
     </div>

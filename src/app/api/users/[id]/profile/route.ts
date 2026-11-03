@@ -8,6 +8,15 @@ import Subject from "@/models/Subject";
 import Topic from "@/models/Topic";
 import TopicProgress from "@/models/TopicProgress";
 import PrepTask from "@/models/PrepTask";
+import PracticeQuestion from "@/models/PracticeQuestion";
+import QuestionProgress from "@/models/QuestionProgress";
+import MockInterview from "@/models/MockInterview";
+import StudySession from "@/models/StudySession";
+import { getPrepInsights } from "@/lib/prep-insights";
+import { getInterviewCountdown } from "@/lib/readiness";
+
+const DAY = 86_400_000;
+const RUBRIC_KEYS = ["communication", "correctness", "depth", "confidence"] as const;
 
 export async function GET(
   request: Request,
@@ -43,27 +52,53 @@ export async function GET(
     let weakSubjects: string[] = [];
     let strongSubjects: string[] = [];
     let joinedAt: string | undefined;
+    let role: string | undefined;
+    let stats: {
+      questionsDone: number;
+      questionsTotal: number;
+      points: number;
+      doneLast7Days: number;
+      daysSinceActive: number | null;
+      studyMinutesWeek: number;
+      studyMinutesTotal: number;
+    } | null = null;
+    let subjects: { name: string; mastery: number; done: number; total: number }[] = [];
+    let mock: {
+      count: number;
+      avgScore: number | null;
+      last: { date: string; score: number }[];
+      rubric: Record<string, number | null>;
+    } | null = null;
+    let interview: { date: string; daysLeft: number } | null = null;
 
     if (primaryGroupId) {
-      const group = await Group.findById(primaryGroupId).lean();
+      // Independent lookups run together; tasks are counted by the database instead of loaded.
+      const [group, readinessValue, taskCount, completedTaskCount, groupSubjects, topics] = await Promise.all([
+        Group.findById(primaryGroupId).lean(),
+        getUserReadiness(targetId, primaryGroupId),
+        PrepTask.countDocuments({ userId: targetId, groupId: primaryGroupId }),
+        PrepTask.countDocuments({ userId: targetId, groupId: primaryGroupId, status: "completed" }),
+        Subject.find({ groupId: primaryGroupId }).select("_id name").lean(),
+        Topic.find({ groupId: primaryGroupId }).select("_id subjectId confidence").lean(),
+      ]);
       const member = group?.members.find((m) => String(m.userId) === targetId);
       joinedAt = member?.joinedAt?.toISOString();
-
-      readiness = await getUserReadiness(targetId, primaryGroupId);
-
-      const tasks = await PrepTask.find({ userId: targetId, groupId: primaryGroupId }).lean();
-      tasksCompleted = tasks.filter((t) => t.status === "completed").length;
-      tasksTotal = tasks.length;
-
-      const subjects = await Subject.find({ groupId: primaryGroupId }).lean();
-      const topics = await Topic.find({ groupId: primaryGroupId }).lean();
+      role = member?.role;
+      if (group?.interviewDate) {
+        const c = getInterviewCountdown(group.interviewDate);
+        interview = { date: new Date(group.interviewDate).toISOString(), daysLeft: c.isPast ? 0 : c.days };
+      }
+      readiness = readinessValue;
+      tasksCompleted = completedTaskCount;
+      tasksTotal = taskCount;
+      const subjectsForScores = groupSubjects;
       const progress = await TopicProgress.find({
         userId: targetId,
         topicId: { $in: topics.map((t) => t._id) },
       }).lean();
       const progressMap = new Map(progress.map((p) => [String(p.topicId), p]));
 
-      const subjectScores = subjects.map((s) => {
+      const subjectScores = subjectsForScores.map((s) => {
         const subjectTopics = topics.filter((t) => String(t.subjectId) === String(s._id));
         const weak = subjectTopics.filter((t) => {
           const p = progressMap.get(String(t._id));
@@ -84,6 +119,70 @@ export async function GET(
         .map((s) => s.name);
     }
 
+    if (primaryGroupId) {
+      const now = Date.now();
+      // Other members only see group-wide data; personal tracks and notes stay private.
+      const insights = await getPrepInsights(targetId, primaryGroupId, { includePersonal: isSelf });
+      subjects = insights.subjects.map((s) => ({
+        name: s.name,
+        mastery: s.mastery,
+        done: s.done,
+        total: s.total,
+      }));
+
+      const groupQuestionIds = (
+        await PracticeQuestion.find({ groupId: primaryGroupId, scope: "group" }).select("_id").lean()
+      ).map((q) => q._id);
+      const [progress, sessions, interviews] = await Promise.all([
+        QuestionProgress.find({
+          userId: targetId,
+          questionId: { $in: groupQuestionIds },
+        })
+          .select("status pointsAwarded lastPracticed updatedAt")
+          .lean(),
+        StudySession.find({ userId: targetId, groupId: primaryGroupId })
+          .select("durationMinutes completedAt")
+          .lean(),
+        MockInterview.find({ userId: targetId, groupId: primaryGroupId }).sort({ date: -1 }).lean(),
+      ]);
+
+      const practised = progress.filter((p) => p.status === "done" || p.status === "revised");
+      const lastAt = practised.reduce((max, p) => {
+        const at = new Date(p.lastPracticed ?? p.updatedAt).getTime();
+        return at > max ? at : max;
+      }, 0);
+      stats = {
+        questionsDone: subjects.reduce((n, s) => n + s.done, 0),
+        questionsTotal: subjects.reduce((n, s) => n + s.total, 0),
+        points: progress.reduce((n, p) => n + (p.pointsAwarded ?? 0), 0),
+        doneLast7Days: practised.filter(
+          (p) => now - new Date(p.lastPracticed ?? p.updatedAt).getTime() <= 7 * DAY
+        ).length,
+        daysSinceActive: lastAt ? Math.floor((now - lastAt) / DAY) : null,
+        studyMinutesWeek: sessions
+          .filter((s) => now - new Date(s.completedAt).getTime() <= 7 * DAY)
+          .reduce((n, s) => n + s.durationMinutes, 0),
+        studyMinutesTotal: sessions.reduce((n, s) => n + s.durationMinutes, 0),
+      };
+
+      const avg = (vals: number[]) =>
+        vals.length ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10 : null;
+      mock = {
+        count: interviews.length,
+        avgScore: avg(interviews.map((i) => i.score)),
+        last: interviews
+          .slice(0, 5)
+          .reverse()
+          .map((i) => ({ date: new Date(i.date).toISOString(), score: i.score })),
+        rubric: Object.fromEntries(
+          RUBRIC_KEYS.map((k) => [
+            k,
+            avg(interviews.map((i) => i.rubric?.[k]).filter((v): v is number => typeof v === "number")),
+          ])
+        ),
+      };
+    }
+
     return jsonOk({
       _id: String(target._id),
       username: target.username,
@@ -98,6 +197,13 @@ export async function GET(
       weakSubjects,
       strongSubjects,
       joinedAt,
+      role,
+      stats,
+      subjects,
+      mock,
+      interview,
+      // Personal goals are only shown to the profile owner.
+      target: isSelf ? { company: target.targetCompany, role: target.targetRole } : null,
       isSelf,
     });
   } catch (err) {

@@ -1,6 +1,6 @@
 import { connectToDatabase } from "@/lib/mongodb";
 import { requireAuthUserId, unauthorized } from "@/lib/api-auth";
-import { jsonOk, jsonError, istDateKey, addIstDays, startOfDay, normalizeQuestionStatus } from "@/lib/utils";
+import { jsonOk, jsonError, istDateKey, addIstDays, startOfDay, normalizeQuestionStatus, normalizeTopicStatus } from "@/lib/utils";
 import {
   activityByDay,
   countQuestionsByStatus,
@@ -188,7 +188,7 @@ async function buildAnalytics(
     const completed = subjectTopics.filter((t) => {
       const p = progressMap.get(String(t._id));
       const status = p?.status ?? t.status;
-      return status === "revised" || status === "interview_ready";
+      return normalizeTopicStatus(status) === "revised";
     }).length;
     return {
       name: s.name,

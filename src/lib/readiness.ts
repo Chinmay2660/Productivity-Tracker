@@ -13,7 +13,7 @@ export function calculateReadiness(input: ReadinessInput): number {
   const { topics, tasksCompleted, tasksTotal, mockScores, studyStreak, daysUntilInterview } =
     input;
 
-  const readyStatuses: TopicStatus[] = ["revised", "interview_ready"];
+  const readyStatuses: TopicStatus[] = ["revised"];
   // Only topics the user has started count — defaults on untouched topics shouldn't inflate score
   const engagedTopics = topics.filter((t) => t.status !== "not_started");
 

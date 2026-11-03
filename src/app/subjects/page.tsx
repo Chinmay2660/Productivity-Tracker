@@ -439,7 +439,8 @@ export default function SubjectsPage() {
               <Button
                 size="sm"
                 onClick={editingSubject ? saveSubject : createSubject}
-                disabled={saving || !newName.trim()}
+                loading={saving}
+                disabled={!newName.trim()}
               >
                 {saving ? "Saving…" : editingSubject ? "Save changes" : "Save track"}
               </Button>

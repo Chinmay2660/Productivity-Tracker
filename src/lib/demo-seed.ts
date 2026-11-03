@@ -29,7 +29,7 @@ const GUEST_AUTH_HASH = hashAuthCode("000000");
 const SUBJECT_TOPICS: Record<string, { topics: string[]; statuses: string[]; confidences: string[] }> = {
   DSA: {
     topics: ["Arrays & Hashing", "Trees & Graphs", "Dynamic Programming", "Sliding Window"],
-    statuses: ["interview_ready", "revised", "practiced", "learning"],
+    statuses: ["revised", "revised", "practiced", "learning"],
     confidences: ["strong", "okay", "weak", "okay"],
   },
   "System Design": {
@@ -44,7 +44,7 @@ const SUBJECT_TOPICS: Record<string, { topics: string[]; statuses: string[]; con
   },
   OS: {
     topics: ["Process Scheduling", "Memory Management", "Deadlocks"],
-    statuses: ["interview_ready", "practiced", "learning"],
+    statuses: ["revised", "practiced", "learning"],
     confidences: ["strong", "okay", "weak"],
   },
 };
@@ -267,6 +267,7 @@ async function ensureMemberDoneQuestions(
           status: "done",
           confidence: "okay",
           lastPracticed: daysFromNow(-2),
+          nextReviewAt: daysFromNow(-1),
         },
         { upsert: true }
       );
@@ -507,11 +508,14 @@ export async function ensureDemoData() {
   }
 
   for (const userId of allMemberIds) {
-    for (const q of questions) {
+    for (const [i, q] of questions.entries()) {
+      const isDone = Math.random() > 0.4;
       await QuestionProgress.create({
         userId,
         questionId: q._id,
-        status: Math.random() > 0.4 ? "done" : "in_progress",
+        ...(isDone
+          ? { status: Math.random() > 0.7 ? "revised" : "done", nextReviewAt: daysFromNow(-(i % 3)) }
+          : { status: "in_progress" }),
         confidence: Math.random() > 0.5 ? "okay" : "strong",
         lastPracticed: daysFromNow(-3),
       });

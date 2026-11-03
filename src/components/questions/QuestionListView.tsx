@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import clsx from "clsx";
 import { ChevronDown, ChevronUp, ExternalLink, Eye } from "lucide-react";
 import Button from "@/components/ui/Button";
+import { LoadingOverlay, QuestionRowsSkeleton } from "@/components/ui/StateViews";
 import QuestionPreviewModal from "@/components/questions/QuestionPreviewModal";
 import QuestionPointsBurst from "@/components/questions/QuestionPointsBurst";
 import QuestionScopeChip from "@/components/questions/QuestionScopeChip";
@@ -161,8 +162,10 @@ export default function QuestionListView({
 
   return (
     <>
-      <div className={clsx("space-y-3 lg:hidden", loading && "opacity-60")}>
-        {visibleQuestions.length === 0 ? (
+      <div className={clsx("relative min-h-32 space-y-3 lg:hidden")}>
+        {loading && questions.length > 0 && <LoadingOverlay label="Loading questions" />}
+        {loading && questions.length === 0 ? <QuestionRowsSkeleton /> : null}
+        {!loading && visibleQuestions.length === 0 ? (
           <p className="text-sm text-[var(--muted)]">No questions match your search.</p>
         ) : null}
         {visibleQuestions.map((q) => (
@@ -228,10 +231,10 @@ export default function QuestionListView({
 
       <div
         className={clsx(
-          "hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] lg:block",
-          loading && "opacity-60"
+          "relative hidden min-h-48 rounded-2xl border border-[var(--border)] bg-[var(--surface)] lg:block"
         )}
       >
+        {loading && questions.length > 0 && <LoadingOverlay label="Loading questions" />}
         <div className="overflow-x-auto">
         <table className="w-full min-w-[48rem] border-separate border-spacing-y-1 text-left text-sm">
           <thead className="bg-[var(--surface-muted)] text-xs uppercase tracking-wide text-[var(--muted)]">
@@ -279,7 +282,14 @@ export default function QuestionListView({
             </tr>
           </thead>
           <tbody>
-            {visibleQuestions.length === 0 ? (
+            {loading && questions.length === 0 ? (
+              <tr>
+                <td colSpan={tableColSpan} className="p-0">
+                  <QuestionRowsSkeleton />
+                </td>
+              </tr>
+            ) : null}
+            {!loading && visibleQuestions.length === 0 ? (
               <tr>
                 <td colSpan={tableColSpan} className="px-4 py-8 text-center text-sm text-[var(--muted)]">
                   No questions match your search.

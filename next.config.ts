@@ -8,6 +8,8 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Don't advertise the framework in response headers.
+  poweredByHeader: false,
   experimental: {
     optimizePackageImports: ["d3", "lucide-react"],
   },

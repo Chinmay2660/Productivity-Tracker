@@ -547,3 +547,34 @@ html.dark input[type="time"]::-webkit-calendar-picker-indicator {
   background-repeat: no-repeat;
   background-position: center;
 }
+
+/* Code blocks — VS Code Light+ / Dark+ palette */
+:root {
+  --code-bg: #f6f4ef;
+  --code-fg: #1f2328;
+  --tok-comment: #6a9955;
+  --tok-string: #a31515;
+  --tok-number: #098658;
+  --tok-keyword: #0000ff;
+  --tok-literal: #0000ff;
+  --tok-function: #795e26;
+  --tok-type: #267f99;
+}
+.dark {
+  --code-bg: #2d2b55;
+  --code-fg: #e3dfff;
+  --tok-comment: #b362ff;
+  --tok-string: #a5ff90;
+  --tok-number: #ff628c;
+  --tok-keyword: #ff9d00;
+  --tok-literal: #ff628c;
+  --tok-function: #fad000;
+  --tok-type: #9effff;
+}
+.tok-comment { color: var(--tok-comment); font-style: italic; }
+.tok-string { color: var(--tok-string); }
+.tok-number { color: var(--tok-number); }
+.tok-keyword { color: var(--tok-keyword); }
+.tok-literal { color: var(--tok-literal); }
+.tok-function { color: var(--tok-function); }
+.tok-type { color: var(--tok-type); }

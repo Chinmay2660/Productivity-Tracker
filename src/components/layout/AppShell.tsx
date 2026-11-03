@@ -5,6 +5,8 @@ import { useRouter, usePathname } from "next/navigation";
 import { useUser } from "@/components/providers/UserProvider";
 import Sidebar from "./Sidebar";
 import MobileNav from "./MobileNav";
+import ShortcutsAndCapture, { OPEN_QUICK_CAPTURE_EVENT } from "./ShortcutsAndCapture";
+import { Plus } from "lucide-react";
 import { AppShellSkeleton } from "@/components/ui/StateViews";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import { getHomePath } from "@/lib/home";
@@ -47,7 +49,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     <div className="fixed inset-0 flex overflow-hidden">
       <Sidebar />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="flex shrink-0 justify-end px-4 pt-4 sm:px-6 lg:hidden">
+        <div className="flex shrink-0 items-center justify-end gap-2 px-4 pt-4 sm:px-6 lg:hidden">
+          {user.activeGroupId && (
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new Event(OPEN_QUICK_CAPTURE_EVENT))}
+              aria-label="Quick capture"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-2 text-sm font-medium text-[var(--muted)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+            >
+              <Plus className="h-4 w-4" aria-hidden />
+              <span>Capture</span>
+            </button>
+          )}
           <ThemeToggle />
         </div>
         {user.isGuest && (
@@ -62,6 +75,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <div className="mx-auto max-w-6xl">{children}</div>
         </main>
         <MobileNav />
+        <ShortcutsAndCapture />
       </div>
     </div>
   );

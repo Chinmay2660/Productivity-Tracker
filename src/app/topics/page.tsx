@@ -10,7 +10,7 @@ import Chip from "@/components/ui/Chip";
 import Modal from "@/components/ui/Modal";
 import { ConfidenceBadge, PriorityBadge } from "@/components/ui/Badge";
 import { TopicsPageSkeleton, ErrorState, EmptyState } from "@/components/ui/StateViews";
-import { TOPIC_STATUS_META } from "@/lib/utils";
+import { TOPIC_STATUS_META, normalizeTopicStatus } from "@/lib/utils";
 import toast from "react-hot-toast";
 import type { ContentScope, Subject, TopicWithProgress } from "@/types";
 
@@ -146,7 +146,7 @@ function TopicsContent() {
             <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">{subject}</h2>
             <div className="space-y-2">
               {subjectTopics.map((t) => {
-                const status = t.userStatus ?? t.status;
+                const status = normalizeTopicStatus(t.userStatus ?? t.status);
                 const confidence = t.userConfidence ?? t.confidence;
                 const meta = TOPIC_STATUS_META[status] ?? TOPIC_STATUS_META.not_started;
                 return (

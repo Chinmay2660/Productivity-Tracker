@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
+import MockDateModal from "@/components/groups/MockDateModal";
+import MockScheduleActions from "@/components/groups/MockScheduleActions";
+import RubricTrendChart from "@/components/groups/RubricTrendChart";
 import { apiGet, apiPatch, apiPost, getErrorMessage } from "@/lib/api";
 import Card, { CardHeader } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
@@ -35,9 +38,6 @@ function roundTabLabel(round: MockInterviewSchedule["rounds"][number]) {
   if (round.isCurrent) return "Upcoming";
   return "No date";
 }
-
-const dateTimeInputClass =
-  "input w-full max-w-[16rem] min-w-0 !rounded-md !px-2.5 !py-1.5 !text-sm input-date-end";
 
 type ViewMode = "schedule" | "history";
 
@@ -102,6 +102,8 @@ export default function GroupMockInterviewsTab({
   const [showLogModal, setShowLogModal] = useState(false);
   const [mockScore, setMockScore] = useState(70);
   const [mockWeaknesses, setMockWeaknesses] = useState("");
+  const [mockFeedback, setMockFeedback] = useState("");
+  const [rubric, setRubric] = useState({ communication: 3, correctness: 3, depth: 3, confidence: 3 });
   const [submittingScore, setSubmittingScore] = useState(false);
   const [mockDate, setMockDate] = useState("");
   const [savingMockDate, setSavingMockDate] = useState(false);
@@ -240,10 +242,14 @@ export default function GroupMockInterviewsTab({
         score: mockScore,
         weaknesses: mockWeaknesses.split(",").map((s) => s.trim()).filter(Boolean),
         strengths: [],
+        feedback: mockFeedback.trim() || undefined,
+        rubric,
       });
       toast.success("Your score has been submitted");
       setShowLogModal(false);
       setMockWeaknesses("");
+      setMockFeedback("");
+      setRubric({ communication: 3, correctness: 3, depth: 3, confidence: 3 });
       setMockScore(70);
       await load(schedule?.activeRoundId);
     } catch (err) {
@@ -272,6 +278,7 @@ export default function GroupMockInterviewsTab({
 
   return (
     <div className="space-y-6">
+      <MockScheduleActions mockDate={activeRound?.interviewDate} />
       <Card>
         <CardHeader
           title="Mock interviews"
@@ -469,7 +476,7 @@ export default function GroupMockInterviewsTab({
                         size="sm"
                         className="w-full"
                         onClick={generateQuestions}
-                        disabled={generating}
+                        loading={generating}
                       >
                         {generating ? "Picking…" : "Generate from done questions"}
                       </Button>
@@ -525,7 +532,21 @@ export default function GroupMockInterviewsTab({
                                   key={scorerId}
                                   className="flex items-center justify-between rounded-lg bg-[var(--card)] px-3 py-2 text-sm"
                                 >
-                                  <span className="truncate">{scorer?.name ?? "Member"}</span>
+                                  <span className="min-w-0">
+                                    <span className="block truncate">{scorer?.name ?? "Member"}</span>
+                                    {submitted?.rubric && (
+                                      <span className="block text-[10px] text-[var(--muted)]">
+                                        Comm {submitted.rubric.communication} · Correct{" "}
+                                        {submitted.rubric.correctness} · Depth {submitted.rubric.depth} ·
+                                        Conf {submitted.rubric.confidence}
+                                      </span>
+                                    )}
+                                    {submitted?.feedback && (
+                                      <span className="block text-[10px] text-[var(--muted)]">
+                                        “{submitted.feedback}”
+                                      </span>
+                                    )}
+                                  </span>
                                   {submitted ? (
                                     <span className="font-semibold text-emerald-600">
                                       {submitted.score}
@@ -574,45 +595,16 @@ export default function GroupMockInterviewsTab({
         )}
       </Card>
 
-      <Modal
+      <RubricTrendChart groupId={groupId} />
+
+      <MockDateModal
         open={showScheduleModal}
         onClose={() => setShowScheduleModal(false)}
-        title="Group mock date"
-        size="sm"
-      >
-        <div className="space-y-3">
-          <p className="text-xs leading-relaxed text-[var(--muted)]">
-            One date and time for the whole group. Everyone uses this slot for question generation
-            on mock day.
-          </p>
-          <div>
-            <label className="text-xs font-medium text-[var(--foreground)]">Date & time (IST)</label>
-            <input
-              type="datetime-local"
-              value={mockDate}
-              onChange={(e) => setMockDate(e.target.value)}
-              className={`mt-1 ${dateTimeInputClass}`}
-            />
-          </div>
-          <div className="flex justify-end gap-2 pt-0.5">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowScheduleModal(false)}
-              disabled={savingMockDate}
-            >
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => void saveMockDate()}
-              disabled={savingMockDate || !mockDate}
-            >
-              {savingMockDate ? "Saving…" : "Save"}
-            </Button>
-          </div>
-        </div>
-      </Modal>
+        value={mockDate}
+        onChange={setMockDate}
+        onSave={() => void saveMockDate()}
+        saving={savingMockDate}
+      />
 
       <Modal
         open={showLogModal}
@@ -636,6 +628,43 @@ export default function GroupMockInterviewsTab({
               className="input mt-1 max-w-[8rem] !py-1.5 !text-sm"
             />
           </div>
+          <div className="space-y-2">
+            <p className="text-xs font-medium">Rubric (1 = poor, 5 = excellent)</p>
+            {(["communication", "correctness", "depth", "confidence"] as const).map((key) => (
+              <div key={key} className="flex items-center justify-between gap-3">
+                <span className="text-xs capitalize">{key}</span>
+                <div className="flex gap-1" role="radiogroup" aria-label={key}>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      role="radio"
+                      aria-checked={rubric[key] === n}
+                      onClick={() => setRubric((r) => ({ ...r, [key]: n }))}
+                      className={clsx(
+                        "h-7 w-7 rounded-md border text-xs font-semibold transition-colors",
+                        rubric[key] === n
+                          ? "border-brand bg-brand text-white"
+                          : "border-[var(--border)] bg-[var(--surface-muted)] hover:bg-[var(--chip-bg-hover)]"
+                      )}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div>
+            <label className="text-xs font-medium">Feedback notes</label>
+            <textarea
+              value={mockFeedback}
+              onChange={(e) => setMockFeedback(e.target.value)}
+              rows={3}
+              placeholder="What went well, what to improve…"
+              className="input mt-1 !py-1.5 !text-sm"
+            />
+          </div>
           <div>
             <label className="text-xs font-medium">Weak areas (comma separated)</label>
             <input
@@ -647,7 +676,7 @@ export default function GroupMockInterviewsTab({
             />
           </div>
           <div className="flex justify-end">
-            <Button size="sm" onClick={submitMockScore} disabled={submittingScore}>
+            <Button size="sm" onClick={submitMockScore} loading={submittingScore}>
               {submittingScore ? "Submitting…" : "Submit score"}
             </Button>
           </div>

@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import clsx from "clsx";
 import { Check, Copy } from "lucide-react";
 import IconButton from "@/components/ui/IconButton";
+import { formatCode } from "@/lib/format-code";
+import { highlightCode } from "@/lib/highlight-code";
 import toast from "react-hot-toast";
 
 export default function QuestionDescriptionBlock({
@@ -18,10 +20,12 @@ export default function QuestionDescriptionBlock({
   collapsedClassName?: string;
 }) {
   const [copied, setCopied] = useState(false);
+  const formatted = useMemo(() => formatCode(description), [description]);
+  const highlighted = useMemo(() => highlightCode(formatted), [formatted]);
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(description);
+      await navigator.clipboard.writeText(formatted);
       toast.success("Description copied");
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
@@ -34,15 +38,15 @@ export default function QuestionDescriptionBlock({
     <div className="relative">
       <pre
         className={clsx(
-          "max-h-[min(24rem,50vh)] overflow-auto rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-3 pr-11 font-mono text-xs leading-relaxed text-[var(--foreground)] whitespace-pre-wrap",
+          "max-h-[min(24rem,50vh)] overflow-auto rounded-lg border border-[var(--border)] bg-[var(--code-bg)] p-3 pr-11 font-mono text-xs leading-relaxed text-[var(--code-fg)] whitespace-pre-wrap",
           collapsible && !expanded && collapsedClassName
         )}
       >
-        <code className="font-mono text-[length:inherit]">{description}</code>
+        <code className="font-mono text-[length:inherit]">{highlighted}</code>
       </pre>
       <IconButton
         label="Copy description"
-        className="absolute top-1.5 right-1.5 bg-[var(--surface-muted)]/80 backdrop-blur-sm"
+        className="absolute top-1.5 right-1.5 bg-[var(--code-bg)]/80 backdrop-blur-sm"
         onClick={copy}
       >
         {copied ? (

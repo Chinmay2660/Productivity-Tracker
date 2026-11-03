@@ -13,12 +13,14 @@ async function serializeTasksWithNames(
     [key: string]: unknown;
   }[]
 ) {
-  const subjects = await Subject.find({
-    _id: { $in: tasks.map((t) => t.subjectId).filter(Boolean) },
-  }).lean();
-  const topics = await Topic.find({
-    _id: { $in: tasks.map((t) => t.topicId).filter(Boolean) },
-  }).lean();
+  const [subjects, topics] = await Promise.all([
+    Subject.find({ _id: { $in: tasks.map((t) => t.subjectId).filter(Boolean) } })
+      .select("_id name")
+      .lean(),
+    Topic.find({ _id: { $in: tasks.map((t) => t.topicId).filter(Boolean) } })
+      .select("_id name")
+      .lean(),
+  ]);
   const subjectMap = new Map(subjects.map((s) => [String(s._id), s.name]));
   const topicMap = new Map(topics.map((t) => [String(t._id), t.name]));
 
